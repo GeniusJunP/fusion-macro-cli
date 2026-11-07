@@ -1,0 +1,21 @@
+[project]
+name = "fusion-macro-cli"
+version = "0.1.0"
+description = "Manage Fusion macro presets extracted from DaVinci Resolve."
+requires-python = ">=3.11"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+
+[project.scripts]
+fusion-macro-cli = "fusion_macro_cli.cli:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"fusion_macro_cli.resolve" = ["*.py3"]

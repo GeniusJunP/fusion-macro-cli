@@ -1,0 +1,15 @@
+{
+  "name": "fusion-macro-cli",
+  "description": "Agent skill for building, checking, previewing, and packaging DaVinci Resolve title presets with fusion-macro-cli",
+  "owner": {
+    "name": "GeniusJunP",
+    "url": "https://github.com/GeniusJunP"
+  },
+  "plugins": [
+    {
+      "name": "fusion-macro-cli",
+      "source": "./",
+      "description": "Skill for creating, fixing, checking, previewing, and packaging DaVinci Resolve title presets (.setting / .drfx) with fusion-macro-cli"
+    }
+  ]
+}

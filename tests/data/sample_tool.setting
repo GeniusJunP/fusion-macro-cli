@@ -1,0 +1,17 @@
+{
+	Tools = ordered() {
+		Template = TextPlus {
+			CtrlWZoom = false,
+			NameSet = true,
+			Inputs = {
+				UseFrameFormatSettings = Input { Value = 1, },
+				StyledText = Input { Value = "サンプル", },
+				Font = Input { Value = "Helvetica", },
+				Size = Input { Value = 0.06, },
+				Center = Input { Value = { 0.5, 0.2 }, },
+				Red1 = Input { Value = 0.2, },
+			},
+			ViewInfo = OperatorInfo { Pos = { 0, 0 } },
+		},
+	},
+}

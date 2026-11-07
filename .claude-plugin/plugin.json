@@ -1,0 +1,13 @@
+{
+  "name": "fusion-macro-cli",
+  "version": "0.1.0",
+  "description": "Skill for creating, fixing, checking, previewing, and packaging DaVinci Resolve title presets (.setting / .drfx) with fusion-macro-cli",
+  "author": {
+    "name": "GeniusJunP",
+    "url": "https://github.com/GeniusJunP"
+  },
+  "homepage": "https://github.com/GeniusJunP/fusion-macro-cli",
+  "repository": "https://github.com/GeniusJunP/fusion-macro-cli",
+  "license": "MIT",
+  "keywords": ["davinci-resolve", "fusion", "title", "macro", "drfx"]
+}

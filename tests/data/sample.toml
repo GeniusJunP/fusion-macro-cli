@@ -1,0 +1,34 @@
+name = "sample"
+source = "sample.comp"
+
+[[output]]
+tool = "Merge1"
+
+[[publish]]
+tool = "Template"
+input = "StyledText"
+label = "テキスト"
+
+[[publish]]
+tool = "Template"
+input = "Font"
+label = "フォント"
+
+[[publish]]
+tool = "Template"
+input = "ColorSelect"
+label = "帯の色"
+
+[[publish]]
+tool = "Template"
+input = "Red1Clone"
+label = "カラー"
+expression = "iif(ColorSelect == 0, 0xE4, 0x41) / 255"
+
+[[publish]]
+tool = "Template"
+input = "Green1Clone"
+
+[[publish]]
+tool = "Template"
+input = "Blue1Clone"

@@ -1,0 +1,130 @@
+Composition {
+	CurrentTime = 0,
+	RenderRange = { 0, 24 },
+	GlobalRange = { 0, 24 },
+	CurrentID = 5,
+	HiQ = true,
+	PlaybackUpdateMode = 0,
+	StereoMode = false,
+	Version = "DaVinci Resolve Studio 21.0.4.0005",
+	SavedOutputs = 1,
+	HeldTools = 0,
+	DisabledTools = 0,
+	LockedTools = 0,
+	AudioOffset = 0,
+	Resumable = true,
+	OutputClips = {
+	},
+	CustomData = {
+		TEMPLATE_ID = "Sample/Titles/sample"
+	},
+	Frames = {
+	},
+	Prefs = {
+		Comp = {
+			FrameFormat = {
+				Rate = 24,
+				GuideRatio = 1.77777777777778,
+				DepthFull = 3,
+				DepthPreview = 3,
+				DepthInteractive = 3,
+			},
+			Unsorted = {
+				GlobalEnd = 24
+			},
+		}
+	},
+	Tools = {
+		Template = TextPlus {
+			CtrlWZoom = false,
+			CtrlWShown = false,
+			Inputs = {
+				GlobalOut = Input { Value = 24, },
+				Width = Input { Value = 1920, },
+				Height = Input { Value = 1080, },
+				UseFrameFormatSettings = Input { Value = 1, },
+				StyledText = Input { Value = "サンプルテロップ", },
+				Font = Input { Value = "Helvetica", },
+				Style = Input { Value = "Bold", },
+				Red1 = Input {
+					Value = 0.254901960784314,
+					Expression = "iif(ColorSelect == 0, 0xE4, 0x41) / 255",
+				},
+				Green1 = Input { Value = 0.243137254901961, },
+				Blue1 = Input { Value = 0.894117647058824, },
+				Alpha1 = Input { Value = 0.8, },
+				Size = Input {
+					SourceOp = "SizeSpline1",
+					Source = "Value",
+				},
+			},
+			ViewInfo = OperatorInfo { Pos = { 165, 49.5 } },
+			UserControls = ordered() {
+				ColorSelect = {
+					{
+						CCS_AddString = "赤"
+					},
+					{
+						CCS_AddString = "青"
+					},
+					{
+						CCS_AddString = "カスタム"
+					},
+					INP_Integer = true,
+					INPID_InputControl = "ComboControl",
+					LINKID_DataType = "Number",
+					ICS_ControlPage = "Controls",
+					LINKS_Name = "帯の色"
+				},
+			}
+		},
+		SizeSpline1 = BezierSpline {
+			SplineColor = {
+				Red = 155,
+				Green = 248,
+				Blue = 0
+			},
+			CtrlWZoom = false,
+			KeyFrames = {
+				[0] = {
+					0.09,
+					RH = { 8, 0.1 },
+					Flags = {
+						Linear = true
+					}
+				},
+				[24] = {
+					0.12,
+					LH = { 16, 0.1 },
+					Flags = {
+						Linear = true
+					}
+				}
+			}
+		},
+		Background1 = Background {
+			CtrlWShown = false,
+			Inputs = {
+				GlobalOut = Input { Value = 24, },
+				Width = Input { Value = 1920, },
+				Height = Input { Value = 1080, },
+				UseFrameFormatSettings = Input { Value = 1, },
+			},
+			ViewInfo = OperatorInfo { Pos = { 165, 16.5 } },
+		},
+		Merge1 = Merge {
+			CtrlWShown = false,
+			Inputs = {
+				Background = Input {
+					SourceOp = "Background1",
+					Source = "Output",
+				},
+				Foreground = Input {
+					SourceOp = "Template",
+					Source = "Output",
+				},
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, 49.5 } },
+		}
+	},
+}
