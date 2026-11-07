@@ -22,6 +22,8 @@ PROJECT_NAME = __PROJECT_NAME__
 TARGETS = __TARGETS__
 RESIZE_WIDTH = __RESIZE_WIDTH__
 RESIZE_HEIGHT = __RESIZE_HEIGHT__
+FRAMING = __FRAMING__
+CONTENT_MARGIN = __CONTENT_MARGIN__
 RESULT_PATH = __RESULT_PATH__
 
 # print() は CLI にも Resolve のログにも出力されないため、.setting ごとの結果を結果ファイルへ書く。
@@ -79,6 +81,45 @@ def _move_playhead(timeline, timecode):
         if timeline.GetCurrentTimecode() == timecode:
             return True
     return False
+
+
+def _content_window(data_window, width, height):
+    # DataWindow は {1: 左, 2: 下, 3: 右, 4: 上} のピクセル座標(原点は左下、右と上は範囲を含まない)。
+    # 範囲の幅と高さに CONTENT_MARGIN を掛けた余白を四方へ足し、短い側を広げてサムネイルの比率にし、
+    # フレームの内側へ移す。フレームより大きくなる辺はフレームの大きさで切り詰め、比率を保つよう他方も縮める。
+    # 範囲が空(全面が透明)なら None を返す。
+    left, bottom, right, top = (float(data_window[k]) for k in (1, 2, 3, 4))
+    if right <= left or top <= bottom:
+        return None
+    w = right - left
+    h = top - bottom
+    cx = (left + right) / 2.0
+    cy = (bottom + top) / 2.0
+    w += 2 * CONTENT_MARGIN * w
+    h += 2 * CONTENT_MARGIN * h
+    aspect = float(RESIZE_WIDTH) / RESIZE_HEIGHT
+    if w / h < aspect:
+        w = h * aspect
+    else:
+        h = w / aspect
+    if w > width:
+        w = float(width)
+        h = w / aspect
+    if h > height:
+        h = float(height)
+        w = h * aspect
+    x = min(max(cx - w / 2.0, 0.0), width - w)
+    y = min(max(cy - h / 2.0, 0.0), height - h)
+    return [int(round(x)), int(round(y)), int(round(w)), int(round(h))]
+
+
+def _render(comp, frame):
+    # 成功時にも完了を告げるダイアログが開くが、Render を comp.Lock() で挟むと抑制できる。
+    comp.Lock()
+    try:
+        return comp.Render({"Start": frame, "End": frame, "Wait": True})
+    finally:
+        comp.Unlock()
 
 
 def _same_value(a, b):
@@ -153,6 +194,7 @@ try:
         frame_requested = target["frame"]
         clip_path = target["output"]
         frame_used = frame_requested
+        content_window = None
 
         expression_mismatches = []
 
@@ -164,6 +206,8 @@ try:
                     "frame_requested": frame_requested,
                     "frame_used": frame_used,
                     "status": status,
+                    "framing": FRAMING,
+                    "content_window": content_window,
                     "reason": reason,
                     "expression_mismatches": expression_mismatches,
                 }
@@ -242,10 +286,26 @@ try:
         outputs = macro.GetOutputList()
         macro_output = outputs.get(1) if outputs else None
 
+        # 追加したツールは後始末で名指しで削除するため、この順に記録する。
+        added = []
+        resize_source = macro_output
+        if FRAMING == "content":
+            # マクロの出力は Render の後も GetValue() が None を返すため、通過させるだけの PipeRouter の出力から
+            # 描画した Image を取得する。Crop は1回目の Render ではフレーム全体のまま通し、DataWindow から求めた範囲を
+            # 設定してから2回目を描画する。
+            router = comp.AddTool("PipeRouter")
+            added.append(router)
+            router.Input.ConnectTo(macro_output)
+            crop = comp.AddTool("Crop")
+            added.append(crop)
+            crop.Input.ConnectTo(router.Output)
+            resize_source = crop.Output
+
         resize = comp.AddTool("BetterResize")
+        added.append(resize)
         resize.SetInput("Width", RESIZE_WIDTH)
         resize.SetInput("Height", RESIZE_HEIGHT)
-        resize.Input.ConnectTo(macro_output)
+        resize.Input.ConnectTo(resize_source)
 
         # Saver はファイル名末尾の数字を取り除いてから連番を付けるため、末尾が数字でない固定名で書いてから改名する。
         # 仕様補完: os.replace が原子的に移動できるよう、一時ディレクトリは出力先の隣に作る。
@@ -253,6 +313,7 @@ try:
         render_clip_path = os.path.join(render_tmp_dir, "render.png")
 
         saver = comp.AddTool("Saver")
+        added.append(saver)
         saver.Input.ConnectTo(resize.Output)
         saver.SetInput("Clip", render_clip_path)
 
@@ -262,24 +323,33 @@ try:
                 _record("failed", "not_connected")
                 continue
 
-            # 成功時にも完了を告げるダイアログが開くが、Render を comp.Lock() で挟むと抑制できる。
-            comp.Lock()
-            try:
-                rendered = comp.Render({"Start": frame_used, "End": frame_used, "Wait": True})
-            finally:
-                comp.Unlock()
-            if not rendered:
+            if not _render(comp, frame_used):
                 _record("failed", "render")
                 continue
+
+            if FRAMING == "content":
+                image = router.Output.GetValue(frame_used)
+                if image is None:
+                    _record("failed", "content_image")
+                    continue
+                content_window = _content_window(image.DataWindow, image.Width, image.Height)
+                # 全面が透明な場合はフレーム全体を描いた1回目の結果を使い、content_window を null として記録する。
+                if content_window is not None:
+                    x, y, w, h = content_window
+                    crop.SetInput("XOffset", x)
+                    crop.SetInput("YOffset", y)
+                    crop.SetInput("XSize", w)
+                    crop.SetInput("YSize", h)
+                    if not _render(comp, frame_used):
+                        _record("failed", "render")
+                        continue
 
             rendered_path = _numbered_path(render_clip_path, frame_used)
             os.replace(rendered_path, clip_path)
 
-            # タイムラインに残す項目が絵を持つよう MediaOut1 へマクロの出力を接続する。削除の巻き添えを避けるため、先に BetterResize と Saver を消す。
-            saver.Delete()
-            resize.Delete()
-            saver = None
-            resize = None
+            # タイムラインに残す項目が絵を持つよう MediaOut1 へマクロの出力を接続する。削除の巻き添えを避けるため、先に追加したツールを消す。
+            while added:
+                added.pop().Delete()
 
             media_out = comp.FindTool("MediaOut1")
             if media_out is None:
@@ -306,10 +376,8 @@ try:
             _record("ok")
         finally:
             # comp.Undo() では追加したツールが残るため、名指しで削除する。
-            if saver is not None:
-                saver.Delete()
-            if resize is not None:
-                resize.Delete()
+            while added:
+                added.pop().Delete()
             shutil.rmtree(render_tmp_dir, ignore_errors=True)
             # Render が動かした comp.CurrentTime を戻さないと、次の挿入が直前の項目を分断する。
             comp.CurrentTime = 0

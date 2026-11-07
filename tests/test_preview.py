@@ -280,6 +280,28 @@ class FakeOutputPort:
         self.owner_name = owner_name
 
 
+class FakeImage:
+    """``output.GetValue(time)`` が返す Image。実機で確認した ``DataWindow`` ``Width`` ``Height`` の属性だけを持つ。"""
+
+    def __init__(self, data_window, width=3840.0, height=2160.0):
+        self.DataWindow = data_window
+        self.Width = width
+        self.Height = height
+
+
+class FakeImageOutputPort(FakeOutputPort):
+    """``GetValue`` で Image を返す出力ポート。PipeRouter の出力に使用する。"""
+
+    def __init__(self, owner_name, image):
+        super().__init__(owner_name)
+        self.image = image
+        self.get_value_calls = []
+
+    def GetValue(self, time):
+        self.get_value_calls.append(time)
+        return self.image
+
+
 class FakeTool:
     def __init__(self, name, outputs=None):
         self.name = name
@@ -339,7 +361,10 @@ class FakeComp:
         media_out=_MISSING,
         media_out_input_port=None,
         ignore_current_time_reset=False,
+        image=_MISSING,
     ):
+        # PipeRouter の出力の GetValue が返す Image。既定はフレームの一部だけに描画した Image。
+        self.image = FakeImage({1: 1516, 2: 23, 3: 2338, 4: 345}) if image is _MISSING else image
         # 実機では comp.Render の後に comp.CurrentTime = 0 でリセットしても、
         # 戻らないことがある(既定フレームを項目の最終フレームにした実行で、
         # 1フレームの断片が生じた)。真にすると代入を無視し、
@@ -426,6 +451,8 @@ class FakeComp:
             if self._saver_input_port is not None:
                 tool.Input = self._saver_input_port
             self._last_saver = tool
+        if tool_id == "PipeRouter":
+            tool.Output = FakeImageOutputPort(tool_id, self.image)
         self.added.append(tool)
         return tool
 
@@ -776,9 +803,20 @@ def _target(tmp_dir, name, frame=None, tool_name=None):
 
 
 def _exec_script(
-    targets, timeline_name, timeline, project, result_path, project_name=None, pm=None
+    targets,
+    timeline_name,
+    timeline,
+    project,
+    result_path,
+    project_name=None,
+    pm=None,
+    framing="frame",
+    content_margin=preview.DEFAULT_CONTENT_MARGIN,
 ):
     """内部スクリプトを組み立てて ``exec`` する。
+
+    ``framing`` の既定は、追加するツールが BetterResize と Saver だけの ``frame`` とする。
+    ``content`` で追加するツールと2回の Render は :class:`ContentFramingTest` で検査する。
 
     スクリプトが例外を送出する場合はそのまま呼び出し側へ伝播させる
     (``self.assertRaises`` で受ける)。結果ファイルへの読み書きは、
@@ -789,7 +827,9 @@ def _exec_script(
         pm = FakeProjectManager(project)
     resolve_fake = FakeResolve(pm)
     bmd_fake = FakeBmd()
-    script = preview.build_script(targets, timeline_name, result_path, project_name)
+    script = preview.build_script(
+        targets, timeline_name, result_path, project_name, framing, content_margin
+    )
     glb = {"resolve": resolve_fake, "bmd": bmd_fake, "__name__": "__preview_script_test__"}
     buf = io.StringIO()
     with redirect_stdout(buf):
@@ -2051,6 +2091,170 @@ class SampleTextTest(unittest.TestCase):
                     setting_path, None, preview.SampleText(), Path(directory) / "sample"
                 )
             self.assertIn("tool-form", str(caught.exception))
+
+
+# ---------------------------------------------------------------------------
+# ``--framing content``: 描画内容の範囲を切り抜いてサムネイルにする。
+# ---------------------------------------------------------------------------
+
+
+class ContentFramingTest(unittest.TestCase):
+    def _run(self, td, comp, content_margin=preview.DEFAULT_CONTENT_MARGIN):
+        targets = [_target(td, comp.macro.name, frame=0)]
+        timeline = FakeTimeline("preview-timeline", [comp])
+        project = FakeProject(FakeMediaPool(timeline))
+        result_path = Path(td) / "result.json"
+        _exec_script(
+            targets,
+            "preview-timeline",
+            timeline,
+            project,
+            result_path,
+            framing="content",
+            content_margin=content_margin,
+        )
+        return targets[0], _find_record(_read_result(result_path), targets[0].setting_path)
+
+    def test_crop_is_set_from_the_data_window_and_rendered_again(self):
+        with tempfile.TemporaryDirectory() as td:
+            # 幅 800、高さ 100 の範囲。余白 10% で 960 x 120、比率 103:58 に合わせて高さを 540.6 へ広げる。
+            image = FakeImage({1: 1000, 2: 1000, 3: 1800, 4: 1100})
+            comp = FakeComp(paste_results=[True], macro=FakeTool("Blue"), image=image)
+            target, record = self._run(td, comp)
+
+            self.assertEqual(record["status"], "ok")
+            self.assertEqual(record["framing"], "content")
+            self.assertEqual(record["content_window"], [920, 780, 960, 541])
+            self.assertTrue(target.output_path.is_file())
+            # 1回目はフレーム全体、2回目は切り抜いた範囲を描画する。
+            self.assertEqual(
+                comp.render_lock_order, ["lock", "render", "unlock", "lock", "render", "unlock"]
+            )
+            router, crop, resize, saver = comp.added
+            self.assertEqual(
+                [t.name for t in comp.added], ["PipeRouter", "Crop", "BetterResize", "Saver"]
+            )
+            self.assertEqual(router.Output.get_value_calls, [0])
+            self.assertEqual(
+                dict(crop.set_inputs),
+                {"XOffset": 920, "YOffset": 780, "XSize": 960, "YSize": 541},
+            )
+            # macro -> PipeRouter -> Crop -> BetterResize -> Saver の順に接続されている。
+            self.assertIs(router.Input.connected, comp.macro.Output)
+            self.assertIs(crop.Input.connected, router.Output)
+            self.assertIs(resize.Input.connected, crop.Output)
+            self.assertIs(saver.Input.connected, resize.Output)
+            for tool in comp.added:
+                self.assertTrue(tool.deleted, f"{tool.name} was not deleted")
+            # タイムラインに残る項目はマクロの出力を直接持つ。
+            self.assertIs(comp.media_out.Input.connected, comp.macro.Output)
+
+    def test_window_is_shifted_inside_the_frame(self):
+        with tempfile.TemporaryDirectory() as td:
+            # 左下の角に接する範囲。広げた範囲はフレームの外へはみ出すため、原点へ寄せる。
+            image = FakeImage({1: 0, 2: 0, 3: 400, 4: 100})
+            comp = FakeComp(paste_results=[True], macro=FakeTool("Blue"), image=image)
+            _target_, record = self._run(td, comp)
+            x, y, w, h = record["content_window"]
+            self.assertEqual((x, y), (0, 0))
+            self.assertAlmostEqual(w / h, 103 / 58, places=2)
+
+    def test_window_larger_than_the_frame_is_capped_at_the_frame(self):
+        with tempfile.TemporaryDirectory() as td:
+            image = FakeImage({1: 10, 2: 10, 3: 3830, 4: 2150})
+            comp = FakeComp(paste_results=[True], macro=FakeTool("Blue"), image=image)
+            _target_, record = self._run(td, comp)
+            x, y, w, h = record["content_window"]
+            self.assertLessEqual(x + w, 3840)
+            self.assertLessEqual(y + h, 2160)
+            self.assertGreaterEqual(min(x, y), 0)
+            self.assertAlmostEqual(w / h, 103 / 58, places=2)
+
+    def test_margin_option_is_applied(self):
+        with tempfile.TemporaryDirectory() as td:
+            # 余白 0 では、比率を合わせる側(高さ)だけが広がり、幅は範囲そのものになる。
+            image = FakeImage({1: 1000, 2: 1000, 3: 1800, 4: 1100})
+            comp = FakeComp(paste_results=[True], macro=FakeTool("Blue"), image=image)
+            _target_, record = self._run(td, comp, content_margin=0.0)
+            self.assertEqual(record["content_window"][0], 1000)
+            self.assertEqual(record["content_window"][2], 800)
+
+    def test_transparent_frame_keeps_the_whole_frame_and_warns(self):
+        with tempfile.TemporaryDirectory() as td:
+            image = FakeImage({1: 0, 2: 0, 3: 0, 4: 0})
+            comp = FakeComp(paste_results=[True], macro=FakeTool("Blue"), image=image)
+            target, record = self._run(td, comp)
+            self.assertEqual(record["status"], "ok")
+            self.assertIsNone(record["content_window"])
+            self.assertEqual(comp.render_lock_order, ["lock", "render", "unlock"])
+            crop = comp.added[1]
+            self.assertEqual(crop.set_inputs, [])
+            self.assertTrue(target.output_path.is_file())
+
+            result_path = Path(td) / "result.json"
+            buf_out, buf_err = io.StringIO(), io.StringIO()
+            with redirect_stdout(buf_out), contextlib.redirect_stderr(buf_err):
+                code = preview._report(result_path, _read_result(result_path))
+            self.assertEqual(code, 0)
+            self.assertIn("fully transparent", buf_err.getvalue())
+
+    def test_missing_image_is_recorded_as_a_failure(self):
+        with tempfile.TemporaryDirectory() as td:
+            comp = FakeComp(paste_results=[True], macro=FakeTool("Blue"), image=None)
+            target, record = self._run(td, comp)
+            self.assertEqual(record["status"], "failed")
+            self.assertEqual(record["reason"], "content_image")
+            self.assertFalse(target.output_path.exists())
+            for tool in comp.added:
+                self.assertTrue(tool.deleted)
+
+
+class FramingOptionTest(unittest.TestCase):
+    def test_build_script_rejects_unknown_framing_and_negative_margin(self):
+        with tempfile.TemporaryDirectory() as td:
+            targets = [_target(td, "Blue")]
+            with self.assertRaises(ValueError):
+                preview.build_script(targets, "tl", Path(td) / "r.json", framing="fit")
+            with self.assertRaises(ValueError):
+                preview.build_script(targets, "tl", Path(td) / "r.json", content_margin=-0.1)
+
+    def _console_script(self, td, setting_text, **kwargs):
+        setting_path = Path(td) / "thumb.setting"
+        setting_path.write_text(setting_text, encoding="utf-8")
+        script_dir = Path(td) / "scripts"
+        with redirect_stdout(io.StringIO()):
+            preview.run(
+                [setting_path],
+                frame=None,
+                timeline_name="tl",
+                console=True,
+                directory=script_dir,
+                **kwargs,
+            )
+        return (script_dir / preview.SCRIPT_FILENAME).read_text(encoding="utf-8")
+
+    def test_default_framing_is_content_with_the_default_margin(self):
+        with tempfile.TemporaryDirectory() as td:
+            script = self._console_script(td, _setting_text("Thumb"))
+            self.assertIn("FRAMING = 'content'", script)
+            self.assertIn("CONTENT_MARGIN = 0.1", script)
+
+    def test_sample_text_defaults_to_the_whole_frame(self):
+        with tempfile.TemporaryDirectory() as td:
+            script = self._console_script(td, _TEXT_STYLE_SETTING, sample=preview.SampleText())
+            self.assertIn("FRAMING = 'frame'", script)
+
+    def test_explicit_framing_overrides_the_sample_default(self):
+        with tempfile.TemporaryDirectory() as td:
+            script = self._console_script(
+                td,
+                _TEXT_STYLE_SETTING,
+                sample=preview.SampleText(),
+                framing="content",
+                content_margin=0.25,
+            )
+            self.assertIn("FRAMING = 'content'", script)
+            self.assertIn("CONTENT_MARGIN = 0.25", script)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ All of it was verified on a real installation. For the procedure, see [SKILL.md]
 ## Verified environments
 
 - DaVinci Resolve Studio 21.0.4.0005 (macOS)
+- DaVinci Resolve Studio 21.2 (macOS). The `DataWindow` and `Crop` items under "Pasting into a composition and rendering" were verified in this environment
 - DaVinci Resolve Studio 21.1.0.0014 (macOS). The sections on the `schema dump` implementation, `preview`,
   the inspector display, and expression evaluation were verified in this environment
 - The Python inside Fusion is 3.13.7
@@ -273,6 +274,13 @@ Read-type calls keep working, so the project appears to be broken. The dialogs v
 - `ConnectTo(None)` does nothing and raises no exception
 - `Saver` can also be used in a Resolve composition. `comp.Render({Start, End, Wait})` returns `True` and writes a PNG
 - Setting `Width` and `Height` of `BetterResize` to 103 and 58 and placing it before the `Saver` yields a 103×58 PNG, the same size as Resolve's title thumbnails
+- `output.GetValue(frame)` on the output of a pasted `MacroOperator` returns `None` even after `Render`. On the output of a built-in tool that the rendering passed through
+  (such as `PipeRouter` connected to the macro's output), it returns an `Image` after `Render`, and `None` before it
+- `Image.DataWindow` is an attribute (not a method) holding `{1: left, 2: bottom, 3: right, 4: top}` in pixels, with the origin at the bottom left.
+  For Text+ based presets it is the area actually drawn, not the whole frame (a 3840×2160 timeline gave, for example, `{1: 115, 2: 1907, 3: 400, 4: 2129}` for a caption at the top left).
+  `Image.Width` and `Image.Height` are the frame size as floats
+- `XOffset`, `YOffset`, `XSize`, and `YSize` of `Crop` are in pixels, with `YOffset` measured from the bottom, the same coordinates as `DataWindow`.
+  Setting them after a `Render` and rendering the same frame again writes the cropped image
 - `Saver` strips the trailing digits from the file name it writes and then appends a 4-digit frame number
   (`thumb.png` becomes `thumb0000.png`, and `Text2.png` becomes `Text0000.png`)
 - Even after `comp.Undo()`, the added tool remained as one extra tool

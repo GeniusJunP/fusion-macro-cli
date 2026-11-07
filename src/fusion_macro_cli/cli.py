@@ -434,6 +434,8 @@ def cmd_preview(args: argparse.Namespace) -> int:
         console=args.console,
         timeout=args.timeout,
         sample=sample,
+        framing=args.framing,
+        content_margin=args.content_margin,
     )
 
 
@@ -609,6 +611,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=preview_mod.DEFAULT_SAMPLE_SIZE,
         help="Text+ Size to use with --sample-text "
         f"(default: {preview_mod.DEFAULT_SAMPLE_SIZE})",
+    )
+    p_preview.add_argument(
+        "--framing",
+        choices=preview_mod.FRAMINGS,
+        default=None,
+        help="content: crop the thumbnail to the non-transparent area of the frame; "
+        "frame: scale the whole frame "
+        f"(default: {preview_mod.DEFAULT_FRAMING}, or {preview_mod.DEFAULT_SAMPLE_FRAMING} with --sample-text)",
+    )
+    p_preview.add_argument(
+        "--content-margin",
+        type=float,
+        default=preview_mod.DEFAULT_CONTENT_MARGIN,
+        help="margin added on each side of the content area with --framing content, "
+        f"as a fraction of its width and height (default: {preview_mod.DEFAULT_CONTENT_MARGIN})",
     )
     p_preview.set_defaults(func=cmd_preview)
 

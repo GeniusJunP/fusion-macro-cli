@@ -32,6 +32,16 @@ SAMPLE_DIRNAME = "_preview_sample"
 THUMBNAIL_WIDTH = 103
 THUMBNAIL_HEIGHT = 58
 
+# サムネイルに描く範囲。``content`` は描画内容(アルファが 0 でない範囲)を切り抜いて拡大し、``frame`` はフレーム全体を縮小する。
+FRAMINGS = ("content", "frame")
+DEFAULT_FRAMING = "content"
+
+# 文字スタイルの見本は ``--sample-size`` で大きさを揃えて描画するため、既定ではフレーム全体を縮小する。
+DEFAULT_SAMPLE_FRAMING = "frame"
+
+# 仕様補完: ``content`` で描画内容の範囲の四方に足す余白の、範囲の幅と高さに対する割合。
+DEFAULT_CONTENT_MARGIN = 0.1
+
 # 仕様補完: 結果ファイルを確認する間隔(秒)。
 _POLL_INTERVAL_SECONDS = 1.0
 
@@ -228,11 +238,18 @@ def build_script(
     timeline_name: str,
     result_path: Path,
     project_name: str | None = None,
+    framing: str = DEFAULT_FRAMING,
+    content_margin: float = DEFAULT_CONTENT_MARGIN,
 ) -> str:
     """Fusion の内部で走る preview スクリプトを組み立てる。
 
     ``project_name`` を渡すとそのプロジェクトを開いてからタイムラインを作り、使ったプロジェクト名を結果ファイルへ記録する。
+    ``framing`` と ``content_margin`` はサムネイルに描く範囲を決める(:data:`FRAMINGS` を参照)。
     """
+    if framing not in FRAMINGS:
+        raise ValueError(f"framing must be one of {FRAMINGS}, got {framing!r}")
+    if content_margin < 0:
+        raise ValueError(f"content_margin must not be negative, got {content_margin!r}")
     targets_literal = repr(
         [
             {
@@ -254,6 +271,8 @@ def build_script(
             "__TARGETS__": targets_literal,
             "__RESIZE_WIDTH__": repr(THUMBNAIL_WIDTH),
             "__RESIZE_HEIGHT__": repr(THUMBNAIL_HEIGHT),
+            "__FRAMING__": repr(framing),
+            "__CONTENT_MARGIN__": repr(float(content_margin)),
             "__RESULT_PATH__": repr(str(Path(result_path).resolve())),
         },
     )
@@ -265,6 +284,8 @@ def write_script(
     result_path: Path,
     directory: Path | None = None,
     project_name: str | None = None,
+    framing: str = DEFAULT_FRAMING,
+    content_margin: float = DEFAULT_CONTENT_MARGIN,
 ) -> Path:
     """:func:`build_script` の出力を書き出し、そのパスを返す。``directory`` を省略すると OS の一時ディレクトリを使う。"""
     if directory is None:
@@ -272,7 +293,7 @@ def write_script(
     return _common.write_script(
         directory,
         SCRIPT_FILENAME,
-        build_script(targets, timeline_name, result_path, project_name),
+        build_script(targets, timeline_name, result_path, project_name, framing, content_margin),
     )
 
 
@@ -321,6 +342,12 @@ def _report(result_path: Path, data: dict | None) -> int:
             )
         if record["status"] == "ok":
             print("fusion-macro-cli: wrote " + record["output"])
+            if record.get("framing") == "content" and record.get("content_window") is None:
+                print(
+                    "fusion-macro-cli: %s: the rendered frame is fully transparent; "
+                    "the thumbnail shows the whole frame" % record["setting"],
+                    file=sys.stderr,
+                )
         else:
             print(
                 "fusion-macro-cli: preview failed for %s at %s"
@@ -381,12 +408,18 @@ def run(
     timeout: float | None = None,
     project_name: str | None = None,
     sample: SampleText | None = None,
+    framing: str | None = None,
+    content_margin: float = DEFAULT_CONTENT_MARGIN,
 ) -> int:
     """``preview`` を実行し、終了コードを返す。
+
+    ``framing`` を省略すると、``sample`` があれば :data:`DEFAULT_SAMPLE_FRAMING`、なければ :data:`DEFAULT_FRAMING` を使う。
 
     ``RunScript`` は完了を待たずに戻るため、内部スクリプトが書く結果ファイルを待って結果を得る。
     前回の結果ファイルを今回の完了と誤認しないよう、起動の前に削除する。
     """
+    if framing is None:
+        framing = DEFAULT_SAMPLE_FRAMING if sample is not None else DEFAULT_FRAMING
     if directory is None:
         directory = Path(tempfile.gettempdir())
     # 上書きしたコピーは、元の ``.setting`` と名前が同じでも区別できるよう別のディレクトリへ書き出す。
@@ -399,6 +432,8 @@ def run(
         result_path,
         directory=directory,
         project_name=project_name,
+        framing=framing,
+        content_margin=content_margin,
     )
     result_path.unlink(missing_ok=True)
 
