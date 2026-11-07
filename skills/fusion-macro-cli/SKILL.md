@@ -202,6 +202,8 @@ fusion-macro-cli preview "<Templates>/Edit/Titles/<category>/title_blue.setting"
 ```
 
 `preview` renders the last frame of the inserted item at 103×58 and writes `<name>.png` next to the `.setting`; this PNG is the preset thumbnail.
+By default the thumbnail is cropped to the rendered content plus a 10% margin (`--framing content`), so a caption near the edge of the frame still fills the thumbnail. Use `--framing frame` when the position within the frame matters.
+For text-style presets (tool form, one Text+), pass `--sample-text Ag --sample-size 0.5` to render a type sample at a fixed size instead of the preset's own text; framing then defaults to `frame` so samples stay comparable.
 `--frame N` writes `<name>_f<N>.png`. `--sample-text [TEXT]` renders a type sample of a tool-form `TextPlus` with the text replaced by `Ag` or `TEXT`.
 It leaves a timeline named `fusion-macro-cli preview YYYY-MM-DD HHMMSS`.
 
