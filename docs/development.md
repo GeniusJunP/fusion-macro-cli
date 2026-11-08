@@ -185,7 +185,8 @@ src/fusion_macro_cli/
   macro.py        reading published inputs and outputs of macros
   publish.py      loading publish declarations and assembling the .setting of the declared form
   rules.py        check rules
-  fonts.py        listing font family names installed on the system (used by font-available)
+  sfnt.py         reading the family, style, and variable-font instance names of each face from sfnt (TTF/OTF/TTC/OTC) bytes
+  fonts.py        listing the font directories of the OS, scanning them, and matching Text+ Font/Style pairs (used by font-available)
   show.py         displaying the input list
   pack.py         archiving the `Templates` directory into a .drfx
   sources/drt.py      extraction from .drt / .drp

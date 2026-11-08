@@ -13,6 +13,7 @@ import zipfile
 from datetime import datetime
 
 from fusion_macro_cli import document
+from fusion_macro_cli import fonts
 from fusion_macro_cli import form as form_mod
 from fusion_macro_cli import pack as pack_mod
 from fusion_macro_cli import publish
@@ -70,6 +71,14 @@ def _load_schema(schema_dir: pathlib.Path | None) -> schema_mod.Schema | None:
         return schema_mod.load()
     except FileNotFoundError:
         return None
+
+
+def _scan_fonts() -> fonts.InstalledFonts:
+    """システムのフォントを1回走査し、読めなかったファイルを標準エラーに書く。``check`` の全ファイルで結果を共有する。"""
+    installed = fonts.installed_fonts()
+    for path, reason in installed.unreadable:
+        print(f"fusion-macro-cli: warning: cannot read font {path}: {reason}", file=sys.stderr)
+    return installed
 
 
 # --------------------------------------------------------------------------
@@ -252,7 +261,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
         print(_file_error(args.declaration, exc), file=sys.stderr)
         return 1
 
-    result = rules.check(setting_doc, schema_obj=schema_obj)
+    result = rules.check(setting_doc, schema_obj=schema_obj, installed=_scan_fonts())
 
     if args.dry_run:
         # --dry-run でも、違反があれば通らない宣言であることを終了コードで示す。
@@ -316,12 +325,13 @@ def _read_and_classify(path: pathlib.Path) -> document.Document | None:
 def _check_paths(paths: list[pathlib.Path], schema_obj: schema_mod.Schema | None) -> bool:
     """各ファイルを検査して結果を書き、違反または読み込みの失敗があれば ``True`` を返す。"""
     any_violation = False
+    installed = _scan_fonts()
     for path in paths:
         doc = _read_and_classify(path)
         if doc is None:
             any_violation = True
             continue
-        result = rules.check(doc, schema_obj=schema_obj)
+        result = rules.check(doc, schema_obj=schema_obj, installed=installed)
         if _print_check_result(result, prefix=f"{path}: ", stream=sys.stdout):
             any_violation = True
     return any_violation
@@ -357,12 +367,13 @@ def cmd_fix(args: argparse.Namespace) -> int:
         output_dir.mkdir(parents=True, exist_ok=True)
 
     any_unfixed = False
+    installed = _scan_fonts()
     for path in paths:
         doc = _read_and_classify(path)
         if doc is None:
             any_unfixed = True
             continue
-        fixed_doc, applied, result = rules.fix(doc, schema_obj=schema_obj)
+        fixed_doc, applied, result = rules.fix(doc, schema_obj=schema_obj, installed=installed)
         for violation in applied:
             print(f"{path}: fixed {violation.rule} {violation.location}: {violation.message}")
         if _print_check_result(result, prefix=f"{path}: ", stream=sys.stdout):

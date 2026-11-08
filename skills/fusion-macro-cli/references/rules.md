@@ -25,7 +25,7 @@ A violation is shown in the format `<path>: <rule name> <location>: <message>`. 
 | `no-dangling` | comp, macro, tool | The referenced tools and inputs exist | Graph | Yes |
 | `keyframe-origin` | comp, macro, tool | The minimum keyframe time across the whole composition is 0 | Graph | Yes |
 | `no-absolute-path` | comp, macro, tool | File references are not absolute paths. `Prefs` of a `.comp` is excluded | — | No |
-| `font-available` | comp, macro, tool | The specified fonts exist on the system | — | No |
+| `font-available` | comp, macro, tool | The pair of `Font` and `Style` exists on the system | — | No |
 | `generator-follows-format` | comp, macro, tool | `UseFrameFormatSettings` of a generator is 1. A generator is a type that has `UseFrameFormatSettings` and `GlobalOut` | Schema | Yes |
 | `loader-scaled` | comp, macro, tool | There is an expression referring to `comp.RenderHeight` downstream of a `Loader`. The tool type is not restricted | Schema, Graph | No |
 | `no-macro` | comp, macro | `Tools` contains no `MacroOperator`. In the macro form, the inside of the top-level macro is the target. The tool form is excluded: its only tool is by definition not a `MacroOperator` | — | Yes (flatten) |
@@ -95,7 +95,19 @@ A modifier that correctly starts partway through time, such as the start point o
 
 ### `font-available`
 
-**Detects** The specified font does not exist on the system.
+**Detects** No installed font face has the family in `Font` and the style in `Style` of the same table. Names are compared without case. When `Style` is absent, only the family is compared.
+
+A face matches as the Typographic Family and Subfamily (name IDs 16 and 17), falling back to Family and Subfamily (1 and 2) when they are absent, and also as Family and Subfamily. For a variable font, each named instance is a style. Only the English names are compared. For example, `Font = "A P-OTF Ryumin Pr6N"` with `Style = "M-KL"`, and `Font = "Noto Sans JP"` with `Style = "Black"` (a named instance).
+
+The fonts are read from these directories, including subdirectories.
+
+| OS | Directories |
+|---|---|
+| macOS | `/System/Library/Fonts`, `/Library/Fonts`, `~/Library/Fonts` |
+| Windows | `%WINDIR%\Fonts`, `%LOCALAPPDATA%\Microsoft\Windows\Fonts` |
+| Other | `/usr/share/fonts`, `/usr/local/share/fonts`, `~/.local/share/fonts`, `~/.fonts` |
+
+`check`, `fix`, and `apply` scan the directories once per run. A font file that cannot be read is reported as a warning on standard error, and the message of a violation includes the number of such files.
 
 **Effect in Resolve** Resolve renders with a different font. TODO: not verified in Resolve.
 

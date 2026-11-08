@@ -384,24 +384,66 @@ def test_no_absolute_path_detects_loader_filename():
     return PASS
 
 
+#: font-available の判定に渡す、インストール済みのフォント。実機のフォントに依存しないよう、ここで作る。
+_FAKE_FONTS = fonts.InstalledFonts(frozenset({fonts.Face("Sample Sans", "W6"), fonts.Face("Sample Sans", "W8")}))
+
+
+def _font_doc(font: str, style: str | None) -> document.Document:
+    style_line = f'Style = Input {{ Value = "{style}", }},' if style is not None else ""
+    return document.parse(
+        f"""Composition {{
+        Tools = {{
+            Template = TextPlus {{ Inputs = {{ Font = Input {{ Value = "{font}", }}, {style_line} }}, }},
+        }},
+    }}"""
+    )
+
+
+def _font_violations(doc: document.Document, installed: fonts.InstalledFonts) -> list[rules.Violation]:
+    return [v for v in rules.check(doc, installed=installed).violations if v.rule == "font-available"]
+
+
 def test_font_available_detects_missing_font():
-    doc = copy.deepcopy(_load_sample())
-    font_value = _get(doc.root, "Tools", "Template", "Inputs", "Font", "Value")
-    assert isinstance(font_value, document.String)
-    font_value.raw = "Definitely Not An Installed Font XYZ123"
+    doc = _font_doc("Definitely Not An Installed Font XYZ123", "W6")
+    violations = _font_violations(doc, _FAKE_FONTS)
+    assert [v.location for v in violations] == ["Template.Inputs"], violations
+    assert "'W6'" in violations[0].message, violations
 
-    result = rules.check(doc)
-    violations = [v for v in result.violations if v.rule == "font-available"]
-    assert violations, "expected a font-available violation for a nonexistent font name"
-
-    _, applied, final = rules.fix(doc)
+    _, applied, final = rules.fix(doc, installed=_FAKE_FONTS)
     assert not any(v.rule == "font-available" for v in applied)
     assert any(v.rule == "font-available" for v in final.violations)
     return PASS
 
 
+def test_font_available_compares_family_and_style():
+    assert not _font_violations(_font_doc("Sample Sans", "W6"), _FAKE_FONTS)
+    assert not _font_violations(_font_doc("sample sans", "w8"), _FAKE_FONTS)
+    violations = _font_violations(_font_doc("Sample Sans", "W3"), _FAKE_FONTS)
+    assert len(violations) == 1, violations
+    assert violations[0].message == "font not found: 'Sample Sans' style 'W3'", violations
+    return PASS
+
+
+def test_font_available_without_style_compares_family():
+    assert not _font_violations(_font_doc("Sample Sans", None), _FAKE_FONTS)
+    violations = _font_violations(_font_doc("Other Sans", None), _FAKE_FONTS)
+    assert violations and violations[0].message == "font not found: 'Other Sans'", violations
+    return PASS
+
+
+def test_font_available_reports_unreadable_font_files():
+    installed = fonts.InstalledFonts(_FAKE_FONTS.faces, ((pathlib.Path("broken.ttf"), "malformed sfnt"),))
+    assert not _font_violations(_font_doc("Sample Sans", "W6"), installed)
+    violations = _font_violations(_font_doc("Sample Sans", "W3"), installed)
+    assert violations and "1 font files could not be read" in violations[0].message, violations
+    return PASS
+
+
+_HIRAGINO_MARU_TTC = pathlib.Path("/System/Library/Fonts/ヒラギノ丸ゴ ProN W4.ttc")
+
+
 def test_font_available_reads_all_ttc_faces():
-    """実機のフォント列挙に対する検査(``fonts.installed_font_families`` をモックしない)。
+    """実機のフォント列挙に対する検査(``fonts.installed_fonts`` をモックしない)。
 
     macOS の日本語フォントは1件の ``.ttc`` が複数フェイスを収め、フェイスごとに
     別のファミリー名を名乗ることがある(例: 「ヒラギノ丸ゴ ProN W4.ttc」が
@@ -410,18 +452,12 @@ def test_font_available_reads_all_ttc_faces():
     実行環境にこのフォントが無ければ判定できないため SKIP で飛ばす(``tests/run.py``
     の規約により、実行環境の欠落は exit 2 で表す)。
     """
-    families = fonts.installed_font_families()
-    if "hiragino maru gothic pron" not in families:
-        print("    Hiragino Maru Gothic ProN not installed on this machine; skipping")
+    if not _HIRAGINO_MARU_TTC.is_file():
+        print(f"    {_HIRAGINO_MARU_TTC} not found on this machine; skipping")
         return SKIP
+    installed = fonts.installed_fonts()
 
-    doc = copy.deepcopy(_load_sample())
-    font_value = _get(doc.root, "Tools", "Template", "Inputs", "Font", "Value")
-    assert isinstance(font_value, document.String)
-    font_value.raw = "Hiragino Maru Gothic ProN"
-
-    result = rules.check(doc)
-    violations = [v for v in result.violations if v.rule == "font-available"]
+    violations = _font_violations(_font_doc("Hiragino Maru Gothic ProN", "W4"), installed)
     assert not violations, violations
     return PASS
 
@@ -1203,6 +1239,8 @@ def test_corpus_check():
     skipped_counts: dict[str, int] = {}
     read_errors: list[str] = []
     kinds: dict[str, int] = {}
+    installed = fonts.installed_fonts()
+    print(f"    unreadable font files: {len(installed.unreadable)}")
 
     for path in files:
         try:
@@ -1213,7 +1251,7 @@ def test_corpus_check():
             read_errors.append(f"{path}: {exc!r}")
             continue
         kinds[kind] = kinds.get(kind, 0) + 1
-        result = rules.check(doc, schema_obj)
+        result = rules.check(doc, schema_obj, installed)
         for v in result.violations:
             per_rule[v.rule].append(f"{path}:{v.location} ({v.message})")
         for rule_id in result.skipped:
@@ -1264,6 +1302,9 @@ TESTS = [
     ("test_no_absolute_path_excludes_prefs", test_no_absolute_path_excludes_prefs),
     ("test_no_absolute_path_detects_loader_filename", test_no_absolute_path_detects_loader_filename),
     ("test_font_available_detects_missing_font", test_font_available_detects_missing_font),
+    ("test_font_available_compares_family_and_style", test_font_available_compares_family_and_style),
+    ("test_font_available_without_style_compares_family", test_font_available_without_style_compares_family),
+    ("test_font_available_reports_unreadable_font_files", test_font_available_reports_unreadable_font_files),
     ("test_font_available_reads_all_ttc_faces", test_font_available_reads_all_ttc_faces),
     ("test_generator_follows_format_detect_and_fix", test_generator_follows_format_detect_and_fix),
     (

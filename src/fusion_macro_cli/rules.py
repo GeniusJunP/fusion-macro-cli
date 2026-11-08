@@ -47,6 +47,7 @@ class Rule:
     needs_schema: bool
     needs_graph: bool
     fixable: bool
+    needs_fonts: bool = False
 
     def __post_init__(self) -> None:
         unknown = set(self.applies_to) - set(form_mod.KINDS)
@@ -69,7 +70,7 @@ RULES: Final[tuple[Rule, ...]] = (
     Rule("no-dangling", _TOOLS, needs_schema=False, needs_graph=True, fixable=True),
     Rule("keyframe-origin", _TOOLS, needs_schema=False, needs_graph=True, fixable=True),
     Rule("no-absolute-path", _TOOLS, needs_schema=False, needs_graph=False, fixable=False),
-    Rule("font-available", _TOOLS, needs_schema=False, needs_graph=False, fixable=False),
+    Rule("font-available", _TOOLS, needs_schema=False, needs_graph=False, fixable=False, needs_fonts=True),
     Rule("generator-follows-format", _TOOLS, needs_schema=True, needs_graph=False, fixable=True),
     Rule("loader-scaled", _TOOLS, needs_schema=True, needs_graph=True, fixable=False),
     Rule("no-macro", _COMP_AND_MACRO, needs_schema=False, needs_graph=False, fixable=True),
@@ -226,6 +227,7 @@ def _check_ascii_name(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     """内側のツール名が ASCII であるかを検査する。式は ``Tool.Port`` の形でツールを参照するため Lua の識別子である必要があり、マクロ名は対象外とする。"""
     violations = []
@@ -305,6 +307,7 @@ def _check_unique_name(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     violations = []
     seen: set[str] = set()
@@ -354,6 +357,7 @@ def _check_no_dangling(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     assert g is not None
     violations = []
@@ -415,6 +419,7 @@ def _check_keyframe_origin(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     """コンポジション全体でキーフレーム時刻の最小値が 0 であるかを検査する。
 
@@ -490,6 +495,7 @@ def _check_no_absolute_path(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     violations = []
     for path, table in _walk(tools_table, ["Tools"]):
@@ -516,23 +522,38 @@ def _check_font_available(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
+    """``Font`` と、同じテーブルの ``Style`` の組がインストールされているかを判定する。
+
+    仕様補完: ``Style`` が無ければファミリーだけで判定する。Edit/ の実データでは ``Font`` に必ず ``Style`` が並び、
+    ``Style`` を省いた Text+ が Fusion でどのスタイルになるかは確かめていないため。
+    """
+    assert installed is not None
     violations = []
-    families = fonts.installed_font_families()
     for path, table in _walk(tools_table, []):
-        for element in table:
-            if element.key is None or element.key.name != "Font":
-                continue
-            if not isinstance(element.value, document.Table):
-                continue
-            value = element.value.get("Value")
-            if not isinstance(value, document.String):
-                continue
-            font_name = value.value
-            if font_name and font_name.strip().lower() not in families:
-                loc = ".".join(path) if path else font_name
-                violations.append(Violation("font-available", loc, f"font not found: {font_name!r}"))
+        font = _input_string(table, "Font")
+        if not font:
+            continue
+        style = _input_string(table, "Style")
+        if installed.has(font, style):
+            continue
+        loc = ".".join(path) if path else font
+        shown = f"{font!r} style {style!r}" if style is not None else repr(font)
+        message = f"font not found: {shown}"
+        if installed.unreadable:
+            message += f" ({len(installed.unreadable)} font files could not be read)"
+        violations.append(Violation("font-available", loc, message))
     return CheckOutcome(violations)
+
+
+def _input_string(table: document.Table, name: str) -> str | None:
+    """``<name> = Input { Value = "..." }`` の文字列を返す。無ければ ``None`` である。"""
+    node = table.get(name)
+    if not isinstance(node, document.Table):
+        return None
+    value = node.get("Value")
+    return value.value if isinstance(value, document.String) else None
 
 
 # --------------------------------------------------------------------------
@@ -556,6 +577,7 @@ def _check_generator_follows_format(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     assert schema_obj is not None
     violations = []
@@ -629,6 +651,7 @@ def _check_loader_scaled(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     """``Loader`` の下流のいずれかのツールが、``comp.RenderHeight`` を参照する式を持つかを検査する。"""
     assert g is not None
@@ -674,6 +697,7 @@ def _check_no_macro(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     """対象の ``Tools`` に含まれる ``MacroOperator`` を、入れ子を含めて1件ずつ報告する。"""
     violations = []
@@ -765,6 +789,7 @@ def _check_no_media_io(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     violations = []
     for name, table in graph_mod.iter_tools(tools_table):
@@ -817,6 +842,7 @@ def _check_page_controls(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     violations = []
     for macro in macro_mod.read_macros(tools_table):
@@ -860,6 +886,7 @@ def _check_input_exists(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     assert schema_obj is not None
     if g is None:
@@ -915,6 +942,7 @@ def _check_label_unique(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     violations = []
     for macro in macro_mod.read_macros(tools_table):
@@ -984,6 +1012,7 @@ def _check_label_control_passive(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     assert schema_obj is not None
     if g is None:
@@ -1040,6 +1069,7 @@ def _check_no_driven_publish(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     if g is None:
         return CheckOutcome([])
@@ -1088,6 +1118,7 @@ def _check_no_connected_publish(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     """接続された入力の公開を検出する。接続と式を併せ持つ入力は式が値を決めるため、``no-driven-publish`` が扱う。"""
     if g is None:
@@ -1119,6 +1150,7 @@ def _check_no_nest_publish(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     if g is None:
         return CheckOutcome([])
@@ -1164,6 +1196,7 @@ def _check_publish_element_selected(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     if g is None or schema_obj is None:
         return CheckOutcome([])
@@ -1208,6 +1241,7 @@ def _check_color_control_rgb(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     """``ColorControl`` の公開が、制御の先頭から赤・緑・青を含むかを検査する。
 
@@ -1248,6 +1282,7 @@ def _check_output_reachable(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     """全ての ``InstanceOutput`` の参照先が存在し、少なくとも1つの出力が画像型であるかを検査する。
 
@@ -1312,6 +1347,7 @@ def _check_no_self_image(
     tools_table: document.Table,
     schema_obj: schema_mod.Schema | None,
     g: graph_mod.Graph | None,
+    installed: fonts.InstalledFonts | None,
 ) -> CheckOutcome:
     if g is None:
         return CheckOutcome([])
@@ -1334,7 +1370,13 @@ def _check_no_self_image(
 # --------------------------------------------------------------------------
 
 _CheckFn = Callable[
-    [document.Document, document.Table, "schema_mod.Schema | None", "graph_mod.Graph | None"],
+    [
+        document.Document,
+        document.Table,
+        "schema_mod.Schema | None",
+        "graph_mod.Graph | None",
+        "fonts.InstalledFonts | None",
+    ],
     "CheckOutcome",
 ]
 _FixFn = Callable[[document.Document, document.Table, "schema_mod.Schema | None"], "list[Violation]"]
@@ -1388,8 +1430,16 @@ assert {rid for rid, _ in _FIXERS_IN_ORDER} == {r.id for r in RULES if r.fixable
 # --------------------------------------------------------------------------
 
 
-def check(doc: document.Document, schema_obj: schema_mod.Schema | None = None) -> CheckResult:
-    """文書を、その種類に適用する規則で検査する。種類を判別できなければ ``ValueError`` を送出する。"""
+def check(
+    doc: document.Document,
+    schema_obj: schema_mod.Schema | None = None,
+    installed: fonts.InstalledFonts | None = None,
+) -> CheckResult:
+    """文書を、その種類に適用する規則で検査する。種類を判別できなければ ``ValueError`` を送出する。
+
+    ``installed`` が ``None`` で、フォントを要する規則を適用する場合は、システムのフォントを走査する。
+    複数の文書を検査する呼び出し側は、:func:`fonts.installed_fonts` の結果を渡して走査を1回にする。
+    """
     kind = form_mod.classify(doc)
     tools_table = doc.root.get("Tools")
     if tools_table is None:
@@ -1397,6 +1447,8 @@ def check(doc: document.Document, schema_obj: schema_mod.Schema | None = None) -
 
     needs_graph = any(kind in r.applies_to and r.needs_graph for r in RULES)
     g = graph_mod.try_build_graph(tools_table, schema_obj) if needs_graph else None
+    if installed is None and any(kind in r.applies_to and r.needs_fonts for r in RULES):
+        installed = fonts.installed_fonts()
 
     violations: list[Violation] = []
     skipped: list[str] = []
@@ -1410,7 +1462,7 @@ def check(doc: document.Document, schema_obj: schema_mod.Schema | None = None) -
         if rule.needs_graph and g is None:
             skipped.append(rule.id)
             continue
-        outcome = _CHECKERS[rule.id](doc, tools_table, schema_obj, g)
+        outcome = _CHECKERS[rule.id](doc, tools_table, schema_obj, g, installed)
         violations.extend(outcome.violations)
         skipped_inputs.extend(outcome.skipped_inputs)
     return CheckResult(
@@ -1419,14 +1471,16 @@ def check(doc: document.Document, schema_obj: schema_mod.Schema | None = None) -
 
 
 def fix(
-    doc: document.Document, schema_obj: schema_mod.Schema | None = None
+    doc: document.Document,
+    schema_obj: schema_mod.Schema | None = None,
+    installed: fonts.InstalledFonts | None = None,
 ) -> tuple[document.Document, tuple[Violation, ...], CheckResult]:
     """修復できる違反を直し、``(修復した文書, 直した違反, 再検査の結果)`` を返す。元の文書は変更しない。"""
     new_doc = copy.deepcopy(doc)
     kind = form_mod.classify(new_doc)
     tools_table = new_doc.root.get("Tools")
     if tools_table is None:
-        return new_doc, (), check(new_doc, schema_obj)
+        return new_doc, (), check(new_doc, schema_obj, installed)
 
     applied: list[Violation] = []
     for rule_id, fixer in _FIXERS_IN_ORDER:
@@ -1437,5 +1491,5 @@ def fix(
             continue
         applied.extend(fixer(new_doc, tools_table, schema_obj))
 
-    result = check(new_doc, schema_obj)
+    result = check(new_doc, schema_obj, installed)
     return new_doc, tuple(applied), result
