@@ -73,7 +73,7 @@ The agent follows the workflow in the Skill and runs the CLI. `preview` creates 
 | [authoring/forms.md](skills/fusion-macro-cli/authoring/forms.md) | Choosing between the macro form and the tool form |
 | [authoring/declaration.md](skills/fusion-macro-cli/authoring/declaration.md) | Declaration (TOML) format specification |
 | [authoring/inspector.md](skills/fusion-macro-cli/authoring/inspector.md) | Conditions for published inputs to be shown and editable in the inspector, and expression evaluation |
-| [reference/commands.md](skills/fusion-macro-cli/reference/commands.md) | Inputs, outputs, options, behavior, and exit codes for each command |
+| [reference/commands/README.md](skills/fusion-macro-cli/reference/commands/README.md) | Inputs, outputs, options, behavior, and exit codes for each command |
 | [reference/rules.md](skills/fusion-macro-cli/reference/rules.md) | What each check rule detects, its impact in Resolve, and whether `fix` can repair it |
 | [resolve/environment.md](skills/fusion-macro-cli/resolve/environment.md) | Resolve Free and Studio, external scripting, restarting after replacing a `.drfx`, and verified versions |
 | [docs/development.md](docs/development.md) | Module architecture, wording conventions, the `.setting` / `.comp` format, and testing |

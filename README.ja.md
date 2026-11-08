@@ -75,7 +75,7 @@ Fusion で見た目を制作した後、エージェントに次のように指�
 | [authoring/forms.md](skills/fusion-macro-cli/authoring/forms.md) | Macro 形式と Tool 形式の選択基準 |
 | [authoring/declaration.md](skills/fusion-macro-cli/authoring/declaration.md) | 宣言ファイル（TOML）の書式仕様 |
 | [authoring/inspector.md](skills/fusion-macro-cli/authoring/inspector.md) | 公開入力がインスペクタに表示・編集できる条件、式の評価 |
-| [reference/commands.md](skills/fusion-macro-cli/reference/commands.md) | 各コマンドの入力・出力、オプション、動作仕様、終了コード |
+| [reference/commands/README.md](skills/fusion-macro-cli/reference/commands/README.md) | 各コマンドの入力・出力、オプション、動作仕様、終了コード |
 | [reference/rules.md](skills/fusion-macro-cli/reference/rules.md) | 検査ルールが検出する内容、Resolve 上での影響、`fix` による自動修正可否 |
 | [resolve/environment.md](skills/fusion-macro-cli/resolve/environment.md) | Resolve の Free と Studio、外部スクリプティング、`.drfx` 差し替え後の再起動、確認したバージョン |
 | [docs/development.md](docs/development.md) | モジュール構成、文言の規約、`.setting` / `.comp` の書式、テスト仕様 |

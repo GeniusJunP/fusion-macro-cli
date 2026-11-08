@@ -1,59 +1,11 @@
-# Commands
+# Commands for creating a preset
 
-```
-extract <drt|drp|setting> -o <dir>       Extract compositions
-declare <setting> [-o <toml>] [--source <comp>]
-                                         Create a declaration from an existing preset
-show <comp|setting|dir>... [--all]       Show candidates to publish, the publish result, or the saved tool
-apply <toml> [-o <dir>] [--dry-run]      Apply a declaration and write a preset
-check <comp|setting|dir>...              Inspect
-fonts <comp|setting|dir>... [--json]     List the Text+ fonts used and whether each is installed
-fix <comp|setting|dir>... [-o <dir>]     Fix the violations that can be fixed
-schema dump [-o <dir>] [--console]       Dump the schema
-preview <setting>... [--frame N] [--project NAME] [--console] [--timeout SEC]
-                     [--sample-text [TEXT]] [--sample-size SIZE]
-                     [--framing content|frame] [--content-margin RATIO]
-                                         Render in Resolve and write a PNG
-pack <dir> -o <drfx>                     Inspect a `Templates` directory and archive it into a .drfx
-```
-
-- [Common behavior](#common-behavior)
 - [extract](#extract)
 - [declare](#declare)
 - [show](#show)
 - [apply](#apply)
-- [check](#check)
-- [fix](#fix)
-- [fonts](#fonts)
-- [pack](#pack)
-- [schema dump](commands/schema-dump.md) and [preview](commands/preview.md), the two commands that connect to Resolve, are in their own files
 
-## Common behavior
-
-- Every command that reads a `.comp` or `.setting` determines its kind from the structure of the document, not from the extension:
-  a root of type `Composition` is a `.comp`; a root with one tool at the top level of `Tools` is a `.setting`, in the **macro form** if that tool is a `MacroOperator` and in the **tool form** otherwise ([forms.md](../authoring/forms.md)).
-  A `.setting` with zero or several top-level tools is an error
-- `show` `check` `fix` `fonts` take one or more paths. A directory is expanded recursively to the `.comp` and `.setting` files under it, skipping files and directories whose names start with `.`, in path order; the paths are processed in the order given.
-  A path that does not exist, or a directory with no target, is an error and nothing is processed
-
-- `show` `apply` `check` `fix` `pack` take `--schema <dir>` and can use a schema in a directory other than the default. The schema directory is described in [schema dump](commands/schema-dump.md#schema-directory)
-- Only `schema dump` and `preview` connect to Resolve; the other commands work in environments without Resolve
-- Each command loads the schema internally. If the schema is not found, it runs as if there were no schema
-- In addition to the list of arguments, `--help` shows the format the command requires. `apply --help` shows the declaration format (each key and whether it can be omitted),
-  `show --help` shows the meaning of the columns (including `same` `diff` `unknown` of `DIFF`), `check --help` and `fix --help` show which rules apply to which kind of document, and `pack --help` shows the structure of the `.drfx`
-- `extract` `declare` `show` `check` `fix` `apply` `pack` report a failure caused by the target file
-  as a one-line error (`fusion-macro-cli: <path>: <reason>`) with exit code 1.
-  A traceback is printed only for a bug in the tool itself
-- Argument errors are reported by `argparse` with exit code 2
-- Publish editing operations are not provided as separate commands. To try a single publish, pass a declaration containing it to `apply --dry-run`
-
-### Exit codes
-
-| Code | Meaning |
-|---|---|
-| 0 | Success. For `check` `fix` `pack` `apply`, there are no violations |
-| 1 | There are violations, a failure caused by the target file, or a failure in processing in Resolve |
-| 2 | Argument error |
+The behavior common to all commands and the exit codes are in [README.md](README.md#common-behavior).
 
 ## extract
 
@@ -200,7 +152,7 @@ Template_Red1Clone	カラー	Template	Red1Clone	-	Controls	-	iif(ColorSelect == 
 
 ## apply
 
-Applies a declaration and writes a preset. The declaration format is described in [declaration.md](../authoring/declaration.md).
+Applies a declaration and writes a preset. The declaration format is described in [declaration.md](../../authoring/declaration.md).
 
 **Input** Path of the declaration, output directory (`-o`)
 
@@ -221,7 +173,7 @@ For the macro form:
 1. Read the `.comp` of `source`
 2. For each `[[publish]]` from the top, obtain the control from the schema and generate an `InstanceInput`.
    The key is `<tool name>_<input name>`, `SourceOp` and `Source` are the `tool` and `input` of the declaration, `Name` is `label` (not written if omitted), `Page` is the `page` of the declaration (default `Controls`),
-   `ControlGroup` is a per-control sequence number only when multiple inputs of the same control are published, `Default` is the current value in the `.comp` ([declaration.md](../authoring/declaration.md#conventions-macro-form)), and `Expression` is the `expression` of the declaration.
+   `ControlGroup` is a per-control sequence number only when multiple inputs of the same control are published, `Default` is the current value in the `.comp` ([declaration.md](../../authoring/declaration.md#conventions-macro-form)), and `Expression` is the `expression` of the declaration.
    Control determination is the same as `show`: schema-derived inputs use the schema's splitting, and `UserControls`-derived inputs use shared `IC_ControlGroup`
 3. Make each `[[output]]` into an `InstanceOutput` in order. The key is `MainOutput<n>`
 4. Make a `MacroOperator` and put the `Tools` of the `.comp` inside as they are
@@ -239,54 +191,3 @@ For the macro form:
 - `Prefs` of the `.comp` (the absolute paths of `Paths.Map`, `LastFile`), `Version`, and `CustomData.TEMPLATE_ID` are not included in the `.setting`
 - The top level is written in the `.setting` format (`Tools = ordered() {`)
 - The formatting rules ([development.md](https://github.com/GeniusJunP/fusion-macro-cli/blob/main/docs/development.md#document-format)) are applied before writing
-
-## check
-
-Inspects. The inspection rules are described in [rules.md](rules.md).
-
-**Input** Paths of `.comp` or `.setting` files, or directories
-
-**Processing** Applies the inspection rules defined for the kind of each target (`.comp`, macro form, or tool form). A rule that is not defined for a kind is not run on it and prints nothing; the table is in [rules.md](rules.md) and in `check --help`.
-
-**Output** Shows the list of violations on standard output. For each file, it shows the rule name and the location in the format `<path>: <rule name> <location>: <message>`.
-
-- If there is no schema, the rules that require the schema are not run, and the names of the rules that were not run are shown
-- If there is even one violation, exit code 1 is returned. A file that cannot be parsed also gives exit code 1
-
-## fix
-
-Fixes the violations that can be fixed. The content of each rule's fix is described in [rules.md](rules.md).
-
-**Input** Paths of `.comp` or `.setting` files, or directories, and the output destination (`-o`)
-
-**Processing** Fixes violations for rules that have a fix procedure, and re-inspects.
-
-**Output** The fixed document. If no output destination is specified, it is overwritten.
-
-- Shows the names and locations of the rules fixed
-- If violations that cannot be fixed remain, they are shown and exit code 1 is returned. What could be fixed is written
-- With `-o`, every target is written to the output destination with its own file name. If two targets have the same file name, it is an error and nothing is written
-
-## fonts
-
-See [commands/fonts.md](commands/fonts.md).
-
-## pack
-
-Inspects a `Templates` directory and archives it into a `.drfx`. It does not connect to Resolve.
-
-**Input** Path of the `Templates` directory, path of the `.drfx` to write (`-o`, required)
-
-**Processing** Inspects all `.comp` and `.setting` files under `Edit/` (including subdirectories) and, if there are no violations, writes everything under `Edit/` as a zip.
-A `.drfx` is a zip with the structure of Fusion's `Templates/`, differing only in extension.
-
-**Output** The `.drfx` at the specified path
-
-- If there is no `Edit/` directly under it, it returns a one-line error and exit code 1
-- If the inspection finds violations, nothing is written, the violations are shown, and exit code 1 is returned
-- All files under `Edit/` are included. Only files and directories whose names start with `.` (`.git` `.DS_Store` `.venv`, etc.) are excluded. No selection by extension is done
-- Paths in the archive are relative to the `Templates` directory (`Edit/...`) and are sorted by name. The same `.drfx` is obtained from the same `Templates` directory
-- If the output destination is inside the `Templates` directory, the output file itself is excluded
-- It is written with `zipfile` and no external commands are used
-
-After replacing the `.drfx` in Resolve, restart Resolve.

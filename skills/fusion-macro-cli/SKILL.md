@@ -176,4 +176,8 @@ Read these when the stage needs them.
 | 4 | [authoring/inspector.md](authoring/inspector.md) | When a published input is shown and editable, and how expressions are evaluated |
 | 4 | [authoring/declaration.md](authoring/declaration.md) | The declaration format and how keys, `ControlGroup`, `Page`, and `Default` are derived |
 | 2, 5, 7 | [reference/rules.md](reference/rules.md) | Each check rule: what it detects, what happens in Resolve, and whether `fix` repairs it |
-| Any | [reference/commands.md](reference/commands.md) | Every command's input, output, options, behavior, and exit codes ([schema dump](reference/commands/schema-dump.md), [preview](reference/commands/preview.md) and [fonts](reference/commands/fonts.md) in their own files) |
+| Any | [reference/commands/README.md](reference/commands/README.md) | The list of commands, and the behavior and exit codes common to all of them |
+| 1, 2, 4, 5, 6 | [reference/commands/authoring.md](reference/commands/authoring.md) | `extract` `declare` `show` `apply`: inputs, outputs, options, and behavior |
+| 2, 5 | [reference/commands/checking.md](reference/commands/checking.md) | `check` `fix` `fonts` |
+| 6 | [reference/commands/resolve.md](reference/commands/resolve.md) | `preview` and `schema dump`, the two commands that connect to Resolve |
+| 7 | [reference/commands/pack.md](reference/commands/pack.md) | `pack` |
