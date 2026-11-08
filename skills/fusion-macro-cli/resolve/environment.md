@@ -24,7 +24,6 @@ The other commands do not use Resolve.
 - `schema dump` needs a composition with actual content open on the Fusion page
 - `preview --project NAME` loads another project. The open project is not reloaded, because reloading a project with unsaved changes opens a save confirmation that blocks every later call
 - `preview` creates a timeline named `fusion-macro-cli preview YYYY-MM-DD HHMMSS` in the project and leaves it there for the user to check
-- A command that connected to Resolve can exit with SIGSEGV (exit code 139) when its Python process shuts down after finishing the work. Resolve keeps running, and the files written are not affected
 
 ## Schema and the Resolve version
 

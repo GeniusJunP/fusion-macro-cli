@@ -566,6 +566,22 @@ def test_check_directory_checks_every_file_in_it():
     return PASS
 
 
+def test_check_directory_includes_subdirectories_and_skips_dot_names():
+    with tempfile.TemporaryDirectory() as td:
+        base = pathlib.Path(td)
+        (base / "Edit" / "Titles" / "X").mkdir(parents=True)
+        (base / "Edit" / "Titles" / "X" / "nested.comp").write_text(_BAD_ASCII_COMP, encoding="utf-8")
+        (base / ".git").mkdir()
+        (base / ".git" / "hidden.comp").write_text(_BAD_ASCII_COMP, encoding="utf-8")
+        (base / ".dot.comp").write_text(_BAD_ASCII_COMP, encoding="utf-8")
+        code, out, err = _run(["check", str(base)])
+        assert code == 1, f"stdout={out} stderr={err}"
+        assert "nested.comp" in out
+        assert "hidden.comp" not in out
+        assert ".dot.comp" not in out
+    return PASS
+
+
 def test_check_empty_directory_reports_error_and_exits_1():
     """``.comp``/``.setting`` を1つも持たないディレクトリを渡した場合、
     標準出力へは何も書かず、標準エラー出力へ理由を書いて終了コード1を返す
@@ -1032,6 +1048,7 @@ TESTS = [
     ),
     ("check_clean_file_exits_0", test_check_clean_file_exits_0),
     ("check_directory_checks_every_file_in_it", test_check_directory_checks_every_file_in_it),
+    ("check_directory_includes_subdirectories_and_skips_dot_names", test_check_directory_includes_subdirectories_and_skips_dot_names),
     (
         "check_empty_directory_reports_error_and_exits_1",
         test_check_empty_directory_reports_error_and_exits_1,

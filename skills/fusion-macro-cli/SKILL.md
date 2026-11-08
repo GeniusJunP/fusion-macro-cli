@@ -176,4 +176,4 @@ Read these when the stage needs them.
 | 4 | [authoring/inspector.md](authoring/inspector.md) | When a published input is shown and editable, and how expressions are evaluated |
 | 4 | [authoring/declaration.md](authoring/declaration.md) | The declaration format and how keys, `ControlGroup`, `Page`, and `Default` are derived |
 | 2, 5, 7 | [reference/rules.md](reference/rules.md) | Each check rule: what it detects, what happens in Resolve, and whether `fix` repairs it |
-| Any | [reference/commands.md](reference/commands.md) | Every command's input, output, options, behavior, and exit codes ([schema dump](reference/commands/schema-dump.md) and [preview](reference/commands/preview.md) in their own files) |
+| Any | [reference/commands.md](reference/commands.md) | Every command's input, output, options, behavior, and exit codes ([schema dump](reference/commands/schema-dump.md), [preview](reference/commands/preview.md) and [fonts](reference/commands/fonts.md) in their own files) |

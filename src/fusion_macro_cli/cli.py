@@ -335,7 +335,9 @@ def cmd_fonts(args: argparse.Namespace) -> int:
 
 
 def _expand_targets(path_args: list[str]) -> list[pathlib.Path] | None:
-    """対象のパスを、引数の順に、ディレクトリであれば直下の ``.comp`` と ``.setting`` へ展開する。
+    """対象のパスを、引数の順に、ディレクトリであれば配下の ``.comp`` と ``.setting`` へ再帰的に展開する。
+
+    ``.`` で始まる名前のファイルとディレクトリは ``pack`` と同じく対象外にする。
 
     パスが無い、またはディレクトリに対象が無い場合はエラーを書き、``None`` を返す。
     """
@@ -348,7 +350,11 @@ def _expand_targets(path_args: list[str]) -> list[pathlib.Path] | None:
         if not target.is_dir():
             paths.append(target)
             continue
-        found = sorted(p for p in target.iterdir() if p.is_file() and p.suffix in _TARGET_SUFFIXES)
+        found = sorted(
+            p for p in target.rglob("*")
+            if p.is_file() and p.suffix in _TARGET_SUFFIXES
+            and not any(part.startswith(".") for part in p.relative_to(target).parts)
+        )
         if not found:
             print(f"fusion-macro-cli: no .comp or .setting under {path_arg}", file=sys.stderr)
             return None
