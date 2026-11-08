@@ -4,7 +4,7 @@ The list of inspection rules applied by `check`, `fix`, `apply`, and `pack`.
 Each rule has an identifier, the kinds of document it applies to, the data it requires, and whether `fix` repairs it.
 Each rule below lists what it detects, what happens in Resolve, and what `fix` does.
 
-A rule applies to some of three kinds of document: `.comp`, macro-form `.setting`, and tool-form `.setting` ([declaration.md](declaration.md)).
+A rule applies to some of three kinds of document: `.comp`, macro-form `.setting`, and tool-form `.setting` ([forms.md](../authoring/forms.md)).
 Rules for tools apply to all three, because the tools inside a macro and the tool saved in the tool form are carried over from the `.comp`.
 Rules for published inputs and outputs apply only to the macro form, the only form that has them.
 A rule that does not apply to a kind is not run on it and prints nothing; `check --help` prints the same table.
@@ -13,6 +13,10 @@ A rule whose "Requires" column includes the schema is not run when there is no s
 When a judgment cannot be made for a published input, `skipped input: ...` is shown.
 
 A violation is shown in the format `<path>: <rule name> <location>: <message>`. A violation fixed by `fix` is shown in the format `<path>: fixed <rule name> <location>: <message>`.
+
+- [List](#list)
+- [Details of rules for tools](#details-of-rules-for-tools)
+- [Details of rules for published inputs and outputs](#details-of-rules-for-published-inputs-and-outputs)
 
 ## List
 
@@ -70,7 +74,7 @@ It also rewrites `SourceOp`, `ActiveTool`, and dotted references in expressions 
 
 **Detects** A connection (`SourceOp` and `Source`) or an expression refers to a tool or input that does not exist.
 
-**Effect in Resolve** The connection is broken, and the expression fails to evaluate and yields the previous value or 0 ([resolve.md](resolve.md#expression-evaluation)).
+**Effect in Resolve** The connection is broken, and the expression fails to evaluate and yields the previous value or 0 ([inspector.md](../authoring/inspector.md#expressions)).
 
 **`fix`** Deletes the connection (`SourceOp` and `Source`) or expression (`Expression`) with the broken reference.
 When the fix of `no-media-io` deletes `MediaIn`, connections that referred to `MediaIn` become violations of this rule.
@@ -133,7 +137,7 @@ The fonts are read from these directories, including subdirectories.
 
 **Detects** `Tools` contains a `MacroOperator`. In the macro form, the inside of the top-level macro is the target.
 
-**Effect in Resolve** It has not been verified whether Fusion accepts a `.setting` that has a macro inside a macro, or, if it does, in which layer `Default` and `Expression` take effect ([resolve.md](resolve.md#setting--comp)).
+**Effect in Resolve** It has not been verified whether Fusion accepts a `.setting` that has a macro inside a macro, or, if it does, in which layer `Default` and `Expression` take effect.
 
 **`fix`** Flattens the macro. If there are further `MacroOperator`s inside, it flattens them recursively.
 
@@ -187,7 +191,7 @@ Connections that referred to `MediaIn` become broken references, which `no-dangl
 ### `no-driven-publish`
 
 **Detects** Among the inputs of inner tools, an input driven by an expression is published. The `Expression` of the `InstanceInput` itself is not a target.
-An input that has both a connection and an expression gets its value from the expression ([resolve.md](resolve.md#expression-evaluation)), so only `no-driven-publish` detects it, and it is not a target of `no-connected-publish`.
+An input that has both a connection and an expression gets its value from the expression ([inspector.md](../authoring/inspector.md#expressions)), so only `no-driven-publish` detects it, and it is not a target of `no-connected-publish`.
 
 **Effect in Resolve** The value is supplied by the expression, so operations in the Inspector are not reflected in the rendering.
 
@@ -197,9 +201,9 @@ An input that has both a connection and an expression gets its value from the ex
 
 **Detects** An input that receives its value from a connection (`SourceOp` and `Source`) rather than an expression is published.
 
-**Effect in Resolve** The Inspector shows this control with a red keyframe button ([resolve.md](resolve.md#published-inputs-in-the-macro-inspector)).
+**Effect in Resolve** The Inspector shows this control with a red keyframe button.
 
-**`fix`** Does not repair this rule, because the input to publish instead depends on the structure of the source tool. When `TextPlus.StyledText` receives its value from `StyledTextCLS`, the input to publish is `Text` of the modifier.
+**`fix`** Does not repair this rule, because the input to publish instead depends on the structure of the source tool ([inspector.md](../authoring/inspector.md#connected-inputs)).
 
 ### `no-nest-publish`
 
@@ -207,7 +211,7 @@ An input that has both a connection and an expression gets its value from the ex
 
 **Effect in Resolve** A heading with a "∨" and no contents is shown, and Fusion puts the control immediately after it inside that collapsible group.
 
-**`fix`** Does not repair this rule. The inputs to publish are the child inputs (`SoftnessX<n>` `SoftnessY<n>`, etc.).
+**`fix`** Does not repair this rule. The inputs to publish instead are the child inputs ([inspector.md](../authoring/inspector.md#collapsible-groups)).
 
 ### `publish-element-selected`
 
@@ -223,7 +227,7 @@ An input that has both a connection and an expression gets its value from the ex
 **Effect in Resolve** An input belonging to an element of a multi-element tool is not shown in the Inspector unless that element is the one selected in the inner tool.
 
 **`fix`** Does not repair this rule. Changing the selection would hide another element, and replacing the input with a `Clone` input would change the declaration.
-`Red1Clone` `Green1Clone` `Blue1Clone` `Alpha1Clone` are shown regardless of the selection. For one `TextPlus`, publishing the element inputs directly shows only one element.
+What to publish instead is in [inspector.md](../authoring/inspector.md#elements-of-a-multi-element-tool).
 
 ### `color-control-rgb`
 
@@ -231,10 +235,9 @@ An input that has both a connection and an expression gets its value from the ex
 
 **Effect in Resolve** It is shown as a swatch that cannot be operated in the Inspector.
 
-**`fix`** Does not repair this rule.
+**`fix`** Does not repair this rule ([inspector.md](../authoring/inspector.md#colors)).
 
 For controls other than colors, publishing only some of the inputs is not a violation. It is also not required that the head of the control have a display name.
-For an input whose schema has `INPS_IC_Name` (such as "始点" for `Start` of `TextPlus`), the name is shown even if `Name` is omitted on the publish side.
 
 ### `output-reachable`
 

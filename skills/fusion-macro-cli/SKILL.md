@@ -41,9 +41,8 @@ pipx install git+https://github.com/GeniusJunP/fusion-macro-cli
 pip install git+https://github.com/GeniusJunP/fusion-macro-cli
 ```
 
-`schema dump` and `preview` use the scripting API of DaVinci Resolve Studio. Before running them, ask the user to start Resolve Studio and enable external scripting in Preferences.
-Resolve Free cannot use external scripting; with Free, pass `--console` and ask the user to paste the printed line into the Fusion page console after switching its language to `Py3`.
-All other commands work without Resolve.
+`schema dump` and `preview` use the scripting API of DaVinci Resolve Studio; all other commands work without Resolve.
+Before running them, read [resolve/environment.md](resolve/environment.md) for what to ask the user (Studio and external scripting, or `--console` with Free).
 
 Get the schema once per Resolve version, with a real composition open on the Fusion page:
 
@@ -118,71 +117,13 @@ and `IC_NAME` is the name the inspector shows when `label` is omitted. Inputs eq
 
 Values, expressions, `UserControls`, and tool names are edited in the `.comp`. The declaration only holds the form and the information the `.comp` lacks: for the macro form, the published inputs, the macro outputs, and the macro name; for the tool form, the tool to save.
 For presets that differ only in values, such as color variants, copy the `.comp`, change the values, and write a declaration for each copy.
-To switch colors within one preset, add a `ComboControl` input (such as `ColorSelect`) to `UserControls` and compute the color in the published color's `expression` from the selection.
 
 ### 4. Choose the form and write the declaration
 
-Choose the form from what the preset needs:
-
-- **Macro form** when the inspector should show only some inputs, with names you choose (Japanese labels, a color picker driven by a `ColorSelect` combo, ...), or when the preset combines several tools (`TextPlus` with `Background` and `Merge`, modifiers, ...).
-- **Tool form** when one tool renders the whole preset and its standard inspector is what the user should edit, such as a text style that is only a `TextPlus` with fonts, colors, and shading set.
-  The tool form has no published inputs, so most of the guidance below on choosing inputs does not apply; the rules for tools still run.
-
-A tool-form declaration:
-
-```toml
-name = "01 Blue Subtitle"      # output file name
-source = "0001_01 Blue Subtitle.comp"
-form = "tool"
-tool = "Template"              # the .comp's tool to save; it keeps this name
-```
-
-Only the named tool is written. A connection from it to another tool of the `.comp` is reported as `no-dangling`; use the macro form if the preset needs more than one tool.
-
-A macro-form declaration:
-
-```toml
-name = "title_blue"            # macro name and output file name
-source = "0003_title.comp"     # relative to the declaration
-form = "macro"                 # the default when omitted
-
-[[output]]                     # at least one; at least one output must be an image
-tool = "Merge1"                # port defaults to "Output"
-
-[[publish]]                    # order = inspector order
-tool = "Template"
-input = "StyledText"
-label = "Text"                 # omit to show the schema's control name (IC_NAME)
-
-[[publish]]
-tool = "Template"
-input = "Red1Clone"
-label = "Color"                # put label only on the head of a control
-
-[[publish]]
-tool = "Template"
-input = "Green1Clone"
-
-[[publish]]
-tool = "Template"
-input = "Blue1Clone"
-```
-
-Leave `page` at its default `Controls`; any other value violates `page-controls`.
-`expression` is an expression on the `InstanceInput` itself, used when the control follows another published input (such as `ColorSelect`).
-
-In the macro form, choose the inputs to publish as follows. A published input is shown and editable in the inspector only when these hold.
-
-- **Colors** (`ColorControl`): publish red, green, and blue, starting at the head of the control. Alpha may be left out.
-  Publishing only some of them shows a swatch that cannot be edited. To publish only opacity, add a `SliderControl` input to `UserControls` and drive alpha with an expression.
-- **Multi-element `TextPlus`**: `TextPlus` has `Red<n>` `Thickness<n>` and others for each shading element (fill, outline, shadow, ...) and shows only the inputs of the element selected by `SelectElement` (selected element = `SelectElement` value + 1; element 1 if absent). Published inputs follow the same rule, so an input of an unselected element is not shown.
-  - For the colors of element 1, publish `Red1Clone` `Green1Clone` `Blue1Clone` (and `Alpha1Clone` if needed). They are shown regardless of the selection, and their values reach `Red1` and the others.
-  - To also show inputs of element 2 or later, add inputs to the tool's `UserControls` in the `.comp`, write expressions on the element inputs that take the values from them, and publish the `UserControls` inputs.
-    Publishing element inputs directly shows only one element per `TextPlus`.
-- **Collapsible groups** (`NestControl`, such as `Softness<n>` of `TextPlus`): publish the child inputs (`SoftnessX<n>` `SoftnessY<n>`), not the group. A published group shows an empty "∨" heading and swallows the next control.
-- **Expression-driven inputs**: do not publish them; the expression supplies the value, so edits do not reach the rendering. Add a `UserControls` input, publish it, and reference it from the expression.
-- **Connected inputs**: an input fed by another tool's output is shown with a red keyframe button. Publish the input of the source modifier instead (for `TextPlus.StyledText` fed by `StyledTextCLS`, publish the modifier's `Text`).
-- **Expressions**: refer to a `UserControls` input as `<tool>.<input>`. A bare identifier can resolve to a tool-internal name instead; `preview` reports such mismatches with exit code 1, and `check` cannot detect them.
+1. Choose the form with [authoring/forms.md](authoring/forms.md): the macro form to show only chosen inputs with chosen names or to combine tools, the tool form to save one self-rendering tool with its own Inspector
+2. For the macro form, choose the inputs to publish with [authoring/inspector.md](authoring/inspector.md). A published input is shown and editable only under the conditions there
+   (colors, elements of `TextPlus`, collapsible groups, connected and expression-driven inputs). Add `UserControls` inputs to the `.comp` when the input to publish does not exist yet
+3. Write the declaration as described in [authoring/declaration.md](authoring/declaration.md). The order of `[[publish]]` is the order in the Inspector; put `label` only on the head of a control
 
 ### 5. Apply
 
@@ -192,7 +133,7 @@ fusion-macro-cli apply work/0003_title.toml -o "<Templates>/Edit/Titles/<categor
 ```
 
 `--dry-run` shows the check result and the `show` output of the result without writing. With violations, `apply` writes nothing and exits with 1.
-Violations print as `<path>: <rule> <location>: <message>`; look up the rule in [references/rules.md](references/rules.md). Fix the cause in the `.comp` or the declaration and apply again.
+Violations print as `<path>: <rule> <location>: <message>`; look up the rule in [reference/rules.md](reference/rules.md). Fix the cause in the `.comp` or the declaration and apply again.
 
 ### 6. Show and preview
 
@@ -208,7 +149,8 @@ For text-style presets (tool form, one Text+), pass `--sample-text Ag --sample-s
 It leaves a timeline named `fusion-macro-cli preview YYYY-MM-DD HHMMSS`.
 
 A passing `check` and a written PNG do not prove the preset is right: whether inputs are shown and editable cannot be confirmed by `check` alone.
-Ask the user to look at the rendering and the inspector on the timeline that `preview` left, and do not report the preset as correct before the user confirms it.
+Ask the user to look at the rendering and the Inspector on the timeline that `preview` left, and do not report the preset as correct before the user confirms it.
+`preview` pastes the preset into a composition, where the Inspector order follows the tool's input list; ask the user to check the order on the preset inserted as a title ([authoring/inspector.md](authoring/inspector.md#order)).
 
 ### 7. Pack
 
@@ -217,17 +159,21 @@ fusion-macro-cli pack "<Templates>" -o titles.drfx
 ```
 
 `pack` checks every `.comp` and `.setting` under `Edit/` and writes the archive only if there are no violations.
-After replacing a `.drfx`, the user must restart Resolve; Resolve caches the title list and does not reread it until restart.
+After replacing a `.drfx`, the user must restart Resolve ([resolve/environment.md](resolve/environment.md#replacing-presets)).
 
 ## Exit codes
 
 0 success; 1 violations, a file error, or a failure in Resolve; 2 invalid arguments.
 
-## Additional resources
+## Documents
 
-Read these when the task needs details:
+Read these when the stage needs them.
 
-- [references/commands.md](references/commands.md): every command's input, output, options, behavior, and exit codes
-- [references/declaration.md](references/declaration.md): the two forms, the declaration format, and how keys, `ControlGroup`, `Page`, and `Default` are derived
-- [references/rules.md](references/rules.md): which kinds of document each check rule applies to, what it detects, what happens in Resolve, and whether `fix` repairs it
-- [references/resolve.md](references/resolve.md): Resolve / Fusion behavior verified on real installations (inspector display, expression evaluation, scripting, timelines)
+| Stage | Document | Contents |
+|---|---|---|
+| Before `schema dump` / `preview`, after `pack` | [resolve/environment.md](resolve/environment.md) | What to ask the user: Studio or Free, external scripting, open project, restart after replacing a `.drfx` |
+| 4 | [authoring/forms.md](authoring/forms.md) | The two forms, how to choose, and the constraints of the tool form |
+| 4 | [authoring/inspector.md](authoring/inspector.md) | When a published input is shown and editable, and how expressions are evaluated |
+| 4 | [authoring/declaration.md](authoring/declaration.md) | The declaration format and how keys, `ControlGroup`, `Page`, and `Default` are derived |
+| 2, 5, 7 | [reference/rules.md](reference/rules.md) | Each check rule: what it detects, what happens in Resolve, and whether `fix` repairs it |
+| Any | [reference/commands.md](reference/commands.md) | Every command's input, output, options, behavior, and exit codes ([schema dump](reference/commands/schema-dump.md) and [preview](reference/commands/preview.md) in their own files) |

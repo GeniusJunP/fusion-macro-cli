@@ -1,6 +1,5 @@
 # Commands
 
-
 ```
 extract <drt|drp|setting> -o <dir>       Extract compositions
 declare <setting> [-o <toml>] [--source <comp>]
@@ -17,15 +16,25 @@ preview <setting>... [--frame N] [--project NAME] [--console] [--timeout SEC]
 pack <dir> -o <drfx>                     Inspect a `Templates` directory and archive it into a .drfx
 ```
 
+- [Common behavior](#common-behavior)
+- [extract](#extract)
+- [declare](#declare)
+- [show](#show)
+- [apply](#apply)
+- [check](#check)
+- [fix](#fix)
+- [pack](#pack)
+- [schema dump](commands/schema-dump.md) and [preview](commands/preview.md), the two commands that connect to Resolve, are in their own files
+
 ## Common behavior
 
 - Every command that reads a `.comp` or `.setting` determines its kind from the structure of the document, not from the extension:
-  a root of type `Composition` is a `.comp`; a root with one tool at the top level of `Tools` is a `.setting`, in the **macro form** if that tool is a `MacroOperator` and in the **tool form** otherwise ([declaration.md](declaration.md)).
+  a root of type `Composition` is a `.comp`; a root with one tool at the top level of `Tools` is a `.setting`, in the **macro form** if that tool is a `MacroOperator` and in the **tool form** otherwise ([forms.md](../authoring/forms.md)).
   A `.setting` with zero or several top-level tools is an error
 - `show` `check` `fix` take one or more paths. A directory is expanded to the `.comp` and `.setting` files directly under it (subdirectories are not included), in name order; the paths are processed in the order given.
   A path that does not exist, or a directory with no target, is an error and nothing is processed
 
-- `show` `apply` `check` `fix` `pack` take `--schema <dir>` and can use a schema in a directory other than the default. The schema directory is described in [schema dump](#schema-dump)
+- `show` `apply` `check` `fix` `pack` take `--schema <dir>` and can use a schema in a directory other than the default. The schema directory is described in [schema dump](commands/schema-dump.md#schema-directory)
 - Only `schema dump` and `preview` connect to Resolve; the other commands work in environments without Resolve
 - Each command loads the schema internally. If the schema is not found, it runs as if there were no schema
 - In addition to the list of arguments, `--help` shows the format the command requires. `apply --help` shows the declaration format (each key and whether it can be omitted),
@@ -56,7 +65,6 @@ The kind is determined by content, not by extension (a ZIP is a `.drt` / `.drp`;
 ### `.drt` / `.drp`
 
 Opens the ZIP, decodes the `<CompositionBA>` element of `SeqContainer/<uuid>.xml`, and extracts the `.comp` text.
-The format is described in [resolve.md](resolve.md#drt--drp).
 
 It does not parse the XML. It searches the start tag and end tag of `<CompositionBA>` as text and takes the content between them.
 If there is no end tag matching a start tag, that XML is recorded as one failure.
@@ -190,7 +198,7 @@ Template_Red1Clone	カラー	Template	Red1Clone	-	Controls	-	iif(ColorSelect == 
 
 ## apply
 
-Applies a declaration and writes a preset. The declaration format is described in [declaration.md](declaration.md).
+Applies a declaration and writes a preset. The declaration format is described in [declaration.md](../authoring/declaration.md).
 
 **Input** Path of the declaration, output directory (`-o`)
 
@@ -211,7 +219,7 @@ For the macro form:
 1. Read the `.comp` of `source`
 2. For each `[[publish]]` from the top, obtain the control from the schema and generate an `InstanceInput`.
    The key is `<tool name>_<input name>`, `SourceOp` and `Source` are the `tool` and `input` of the declaration, `Name` is `label` (not written if omitted), `Page` is the `page` of the declaration (default `Controls`),
-   `ControlGroup` is a per-control sequence number only when multiple inputs of the same control are published, `Default` is the current value in the `.comp` ([declaration.md](declaration.md#conventions)), and `Expression` is the `expression` of the declaration.
+   `ControlGroup` is a per-control sequence number only when multiple inputs of the same control are published, `Default` is the current value in the `.comp` ([declaration.md](../authoring/declaration.md#conventions-macro-form)), and `Expression` is the `expression` of the declaration.
    Control determination is the same as `show`: schema-derived inputs use the schema's splitting, and `UserControls`-derived inputs use shared `IC_ControlGroup`
 3. Make each `[[output]]` into an `InstanceOutput` in order. The key is `MainOutput<n>`
 4. Make a `MacroOperator` and put the `Tools` of the `.comp` inside as they are
@@ -256,139 +264,6 @@ Fixes the violations that can be fixed. The content of each rule's fix is descri
 - Shows the names and locations of the rules fixed
 - If violations that cannot be fixed remain, they are shown and exit code 1 is returned. What could be fixed is written
 - With `-o`, every target is written to the output destination with its own file name. If two targets have the same file name, it is an error and nothing is written
-
-## schema dump
-
-Obtains from Fusion the definitions of inputs and outputs for each tool type. Run it once per Resolve version.
-
-**Input** Output directory (`-o`, defaults to the schema directory)
-
-**Processing** Enumerates the registry and, for all types except the host-side internal operators (4 entries of type class 1),
-adds the tool to the composition, obtains the definition with `GetInputList` and `GetOutputList`, and deletes it.
-OFX plugins and hidden items are also included.
-
-**Output** `fusion-<version>.json.gz`. The version is obtained from `fusion.GetAttrs()["FUSIONS_Version"]`.
-The order of inputs is written as returned by `GetInputList`. The file format is described in [development.md](https://github.com/GeniusJunP/fusion-macro-cli/blob/main/docs/development.md#schema-file-format).
-
-### Schema directory
-
-The default directory is `~/.local/share/fusion-macro-cli/schema/`. It can be overridden with `--schema` and the environment variable `FUSION_MACRO_CLI_SCHEMA`.
-If the schema directory contains multiple schemas, the one with the latest modification time is used.
-After updating Resolve and running `schema dump` again, the new schema is used without deleting the old one.
-
-The schema is Blackmagic's internal product data (including localized display names), so it is not included in the repository. Users generate it from their own environment with `schema dump`.
-
-### Execution conditions
-
-Dumping is done under the following conditions (the behavior that is the basis is in [resolve.md](resolve.md#schema-acquisition)).
-
-- During the dump, the composition is locked with `comp.Lock()`
-- Run it with a composition that has actual content open on the Fusion page. First one tool is generated to check, and if `AddTool` does not accept it, it is an error
-- A dedicated timeline is created for each dump and deleted afterwards. Existing compositions are not used
-- It guarantees that the set of tools in the composition does not change before and after the dump. Tools that were added are deleted even if it exits by an exception
-- `pm.SaveProject()` is not called for an unnamed project
-- The registry is enumerated before any tool is generated
-- For multi-element tools, `Enabled<n>` is set to 1 and this is repeated until no more inputs appear
-- The script reads the version from Fusion, decides the file name, and writes it. The CLI side does not wait for the file to appear and does not rename it
-- By default (Studio), the script to run inside Fusion is written to the schema directory as `_dump.py3` and run with `fusion.RunScript(path)`
-- With `--console`, it does not connect to Resolve; it writes `_dump.py3` and writes to standard output one line to paste into the Fusion page console.
-  The user switches the console language to `Py3`, pastes it, and runs it with Return
-
-  ```
-  exec(open("<schema directory>/_dump.py3", encoding="utf-8").read())
-  ```
-
-- If it cannot connect to Resolve, it shows an error and returns exit code 1. External scripting is not available in the Free edition, so in that case `--console` is suggested
-
-## preview
-
-Pastes a `.setting` into a Resolve composition, writes a PNG, and leaves the timeline.
-Thumbnail generation and visual checking are done with one command.
-
-**Input** Path of a `.setting` (one or more)
-
-**Options**
-
-| Option | Description |
-|---|---|
-| `--frame N` | Frame number to render. If omitted, the last frame of the inserted item |
-| `--project NAME` | Project in which to create the timeline. If omitted, the open project |
-| `--console` | Does not connect to Resolve; shows one line to paste into the Fusion page console |
-| `--timeout SEC` | Seconds to wait for the result file. Defaults to 120 seconds per `.setting` × the number of `.setting` files |
-| `--sample-text [TEXT]` | Renders with the text of the top-level tool replaced by `TEXT` (`Ag` if omitted) |
-| `--sample-size SIZE` | `Size` used together with `--sample-text`. Defaults to 0.5. Has no effect without `--sample-text` |
-| `--framing content\|frame` | `content` crops the thumbnail to the area of the frame whose alpha is not 0; `frame` scales the whole frame. Defaults to `content`, or `frame` with `--sample-text` |
-| `--content-margin RATIO` | Margin added on each side of the content area with `--framing content`, as a fraction of the area's width and height. Defaults to 0.1 |
-
-**Prerequisites** Run Resolve Studio and enable external scripting in the preferences. Use `--console` for Free.
-
-**Processing** Generates the script to run inside Fusion in a temporary directory.
-In Studio it is run with `fusion.RunScript(path)`, and with `--console` the user pastes the following one line into the Fusion page console. Both run the same script.
-
-```
-exec(open("<path of the generated script>", encoding="utf-8").read())
-```
-
-The script does the following.
-
-1. Creates a timeline with the name the CLI specified
-2. For each `.setting`, just before insertion, moves the playhead to the start of the last existing item. It does not move for the first insertion, when there are no items
-3. Inserts an empty composition with `tl.InsertFusionCompositionIntoTimeline()`, opens that composition on the Fusion page, and then pastes with `comp.Paste(bmd.readfile(path))`.
-   The procedure to open it identifies the new item with `GetUniqueId()`, moves the playhead to `item.GetStart()`, calls `OpenPage("edit")` and then `OpenPage("fusion")`,
-   and confirms that `GetToolList()` is only `MediaOut1`. The pasted macro is obtained with `comp.FindTool(<macro name>)`
-4. Connects `BetterResize` (`Width` 103, `Height` 58) and a `Saver`, and writes the PNG with `comp.Render({Start, End, Wait})`.
-   With `--framing content`, `PipeRouter` and `Crop` are placed between the macro's output and `BetterResize`; the first `Render` passes the whole frame,
-   the content window is computed from the `DataWindow` of the image that `PipeRouter.Output.GetValue(frame)` returns, it is set on `Crop`, and the frame is rendered again.
-   Only the call to `comp.Render()` is wrapped in `comp.Lock()` / `comp.Unlock()`. Right after `Render`, it sets `comp.CurrentTime = 0`
-5. Deletes the added tools by specifying their names, and then connects the macro's output (`macro.GetOutputList()[1]`) to the input of `MediaOut1` obtained with `comp.FindTool("MediaOut1")`
-6. Sets the name of the inserted item to the macro name (`item.SetName`)
-7. Leaves the timeline. The user checks the rendering and the Inspector in this timeline
-8. For expressions of inner tools that refer to an input name of that tool's `UserControls` by a bare identifier,
-   it compares the evaluated value of the expression with the evaluated value of the expression with that identifier qualified as `<tool name>.<identifier>`, and restores the expression after the comparison.
-   If the values do not match, the bare identifier is resolved not to the `UserControls` input but to a name inside the tool ([resolve.md](resolve.md#expression-evaluation)).
-   This name does not appear in `GetInputList` or the schema, so `check` cannot detect it.
-   The qualified expression is built by the CLI side from the `.setting`, and built-in names such as `time` and the inside of string literals are not qualified.
-   The mismatch is recorded in the result file, and the CLI shows the expression and both values and returns exit code 1. The PNG is written
-
-**Output** A PNG in the same directory as the `.setting`, and a timeline in Resolve
-
-- The `.setting` may be in either form. A `.comp`, or a document that is neither form, is a one-line error
-- The project in which the timeline is created is the project opened with `pm.LoadProject(NAME)` when `--project NAME` is given, and the open project when omitted.
-  If the specified name is the same as the open project, `LoadProject` is not called. In either case, the project name used is written to standard output.
-  If it cannot be opened with `--project NAME`, it exits with a one-line error and exit code 1
-- The timecode to which the playhead is moved to the start of the item is built from the timeline's `timelineFrameRate` and `timelineDropFrameTimecode`, following the drop-frame format.
-  After moving, it is compared with `timeline.GetCurrentTimecode()` and repeated up to 3 times until they match. If they do not match, that `.setting` is recorded as a failure
-- The timeline name is decided by the CLI and is `fusion-macro-cli preview YYYY-MM-DD HHMMSS` (local time, down to seconds). No colons are put between hours, minutes, and seconds.
-  A collision from running twice in the same second is not handled. If `CreateEmptyTimeline` returns `None`, it exits with a one-line error and exit code 1
-- The internal script writes the result for each `.setting` (`setting`, `output`, `frame_requested`, `frame_used`, `status`, `reason`, `framing`, `content_window`) to a JSON result file.
-  `frame_requested` is the value of `--frame`, or `null` if omitted, and `frame_used` is the frame number actually passed to `Render`.
-  The result file is created in the same temporary directory as the internal script, and the CLI embeds its path in the script. The CLI deletes any existing result file before launching,
-  waits for the result file to appear after launching, reads it, writes the PNGs written and the list of failures to standard output, and decides the exit code
-- The upper limit of the wait is 120 seconds per `.setting` × the number of files and can be changed with `--timeout`. If exceeded, it exits with a one-line error and exit code 1,
-  and if the result file was partly written, its contents are also shown
-- With `--console`, it shows the path of the result file together with the one line to paste and exits with exit code 0
-- When multiple `.setting` files are given, one failure (paste, playhead move, connection, `Render`) does not stop the rest.
-  The failed `.setting` is recorded with its reason and processing continues, and after all are done the list of failures is shown and exit code 1 is returned. If none failed, 0 is returned
-- If no frame is specified, the last frame of the inserted item (`item.GetEnd() - item.GetStart() - 1`) is rendered and written to `<name>.png`. This becomes the preset's thumbnail.
-  Keyframe times are not used for the default frame. Animation that continues beyond the length of the item cannot be rendered for that range
-- If `--frame N` is specified, that value is used and the output is written to `<name>_f<N>.png`. If `N` exceeds the last frame of the item, it is not corrected and that `.setting` is recorded as a failure
-- The output of the `Saver` is the fixed name `render.png` in the temporary directory, and after writing it is moved to `<name>.png`
-- Before `comp.Render()`, it confirms that `saver.Input.GetConnectedOutput()` is not `None`
-- After connecting to `MediaOut1`, it confirms that `media_out.Input.GetConnectedOutput()` is not `None`. If it is `None`,
-  or `comp.FindTool("MediaOut1")` returns `None`, that `.setting` is recorded as a failure and processing moves to the next
-- Added tools are deleted by specifying their names, not with `comp.Undo()`
-- With `--framing content`, the content window is the `DataWindow` of the rendered image, enlarged on each side by `--content-margin` × its width and height,
-  then widened on its shorter side to the 103:58 ratio of the thumbnail. A window larger than the frame is capped at the frame size while keeping the ratio,
-  and a window that extends past an edge of the frame is shifted inside the frame. The window is recorded in the result file as `content_window` (`[x, y, width, height]` in pixels, origin at the bottom left).
-  If the rendered frame is fully transparent, the first rendering of the whole frame is kept, `content_window` is `null`, and the CLI shows a warning on standard error.
-  If `GetValue` returns no image, that `.setting` is recorded as a failure with the reason `content_image`
-- With `--sample-text`, the default framing is `frame`, so that the size set with `--sample-size` is kept in the thumbnail. `--framing content` can be given explicitly
-- `comp.Lock()` is called only around `Render`
-- With `--sample-text [TEXT]`, which needs a tool-form `.setting` of a `TextPlus` (a macro form is a one-line error, because its `Inputs` are `InstanceInput`s without the tool's values), a copy of the `.setting` in which `StyledText` of the top-level tool is `TEXT` (`Ag` if omitted), `Size` is the value of `--sample-size` (default 0.5),
-  and `Center` is `{0.5, 0.5}` is written to `_preview_sample/` in the temporary directory, and that copy is pasted.
-  The rewrite is done on the `.setting` document before pasting (because tools inside a macro cannot be obtained with `comp.FindTool`)
-
-The method of placing a `.setting` in a `Templates` directory and inserting it as a title is not used, because Resolve caches the list of titles ([resolve.md](resolve.md#timelines-and-titles)).
 
 ## pack
 

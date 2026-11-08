@@ -66,6 +66,7 @@ def _registry_entry(tool_id, attrs):
     }
 
 
+# fusion.Version は 21.04 のように丸めた数値を返すため、完全な版番号の文字列を属性から取る。
 version = fusion.GetAttrs()["FUSIONS_Version"]
 out_path = os.path.join(SCHEMA_DIR, "fusion-%s.json.gz" % version)
 
@@ -92,7 +93,7 @@ for i in range(1, project.GetTimelineCount() + 1):
         media_pool.DeleteTimelines([existing])
         break
 
-# 起動直後はどのページも開いておらず、その状態では CreateEmptyTimeline が None を返す。
+# 起動直後はどのページも開いておらず、その状態では CreateEmptyTimeline が None を返す(Resolve Studio 21.1.2 で確認)。
 # プロジェクトマネージャーやダイアログの表示中は OpenPage が効かないため、エラーにする。
 resolve.OpenPage("edit")
 if resolve.GetCurrentPage() is None:
@@ -121,11 +122,14 @@ if comp is None:
     raise RuntimeError("GetFusionCompByIndex returned None")
 
 # ロックしないと、Loader 系がファイル選択のダイアログを開き、ペイントストロークの生成で Fusion がクラッシュする。
+# None を返した OFX_Operator の AddTool の直後の AddTool でも Fusion がクラッシュする。
 comp.Lock()
 
 added = []  # 例外で抜けた場合も消すための追跡。
 
 
+# 名前の無いプロジェクトで SaveProject を呼ぶと保存先を尋ねるモーダルダイアログが開き、以後の書き込み系の呼び出しが
+# 揃って失敗するため、取得の前後でプロジェクトを保存しない。専用のタイムラインは削除して元の状態へ戻す。
 def _cleanup():
     for tool in list(added):
         tool.Delete()

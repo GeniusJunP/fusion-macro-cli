@@ -71,12 +71,15 @@ Fusion で見た目を制作した後、エージェントに次のように指�
 
 | ドキュメント | 内容 |
 |---|---|
-| [skills/fusion-macro-cli/SKILL.md](skills/fusion-macro-cli/SKILL.md) | 全体フロー、用語定義、形式の選択基準、公開入力がインスペクタに表示される条件 |
-| [references/commands.md](skills/fusion-macro-cli/references/commands.md) | 各コマンドの入力・出力、オプション、動作仕様、終了コード |
-| [references/declaration.md](skills/fusion-macro-cli/references/declaration.md) | 宣言ファイル（TOML）の書式仕様 |
-| [references/rules.md](skills/fusion-macro-cli/references/rules.md) | 検査ルールが検出する内容、Resolve 上での影響、`fix` による自動修正可否 |
-| [references/resolve.md](skills/fusion-macro-cli/references/resolve.md) | 実機検証に基づく DaVinci Resolve / Fusion の挙動 |
-| [docs/development.md](docs/development.md) | 内部データ構造、モジュール構成、ドキュメント規約、テスト仕様 |
+| [skills/fusion-macro-cli/SKILL.md](skills/fusion-macro-cli/SKILL.md) | 全体フロー、用語定義、各段階で読むドキュメント |
+| [authoring/forms.md](skills/fusion-macro-cli/authoring/forms.md) | Macro 形式と Tool 形式の選択基準 |
+| [authoring/declaration.md](skills/fusion-macro-cli/authoring/declaration.md) | 宣言ファイル（TOML）の書式仕様 |
+| [authoring/inspector.md](skills/fusion-macro-cli/authoring/inspector.md) | 公開入力がインスペクタに表示・編集できる条件、式の評価 |
+| [reference/commands.md](skills/fusion-macro-cli/reference/commands.md) | 各コマンドの入力・出力、オプション、動作仕様、終了コード |
+| [reference/rules.md](skills/fusion-macro-cli/reference/rules.md) | 検査ルールが検出する内容、Resolve 上での影響、`fix` による自動修正可否 |
+| [resolve/environment.md](skills/fusion-macro-cli/resolve/environment.md) | Resolve の Free と Studio、外部スクリプティング、`.drfx` 差し替え後の再起動、確認したバージョン |
+| [docs/development.md](docs/development.md) | モジュール構成、文言の規約、`.setting` / `.comp` の書式、テスト仕様 |
+| [docs/data.md](docs/data.md) | 内部データ（文書の種類、スキーマ、制御、参照グラフ） |
 
 ## ライセンス
 

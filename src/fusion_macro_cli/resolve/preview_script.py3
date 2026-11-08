@@ -10,6 +10,8 @@
 #   - 再生ヘッドが項目の内部にあると、挿入はその位置で直前の項目を分断する。存在しない末尾へ再生ヘッドを
 #     先回りさせても分断する
 #   - comp.Render() は comp.CurrentTime を描いたフレームへ動かし、SetCurrentTimecode() では挿入位置が戻らない
+#   - Resolve はタイトルの一覧をキャッシュし、起動中は Templates ディレクトリの変更を読み直さない。そのため .setting を
+#     タイトルとして挿入せず、空のコンポジションを挿入して bmd.readfile() で読んだ内容を貼り付ける
 #   - 書き込み系の呼び出しが揃って None を返し始めた場合はモーダルダイアログが開いている疑いがあり、以後の処理を
 #     信頼できないため停止する。貼り付け、再生ヘッドの移動、接続、Render の失敗はその .setting の失敗として記録して続ける
 import json
@@ -170,7 +172,7 @@ try:
 
     media_pool = project.GetMediaPool()
 
-    # 起動直後はどのページも開いておらず、その状態では CreateEmptyTimeline が None を返す。
+    # 起動直後はどのページも開いておらず、その状態では CreateEmptyTimeline が None を返す(Resolve Studio 21.1.2 で確認)。
     # タイムラインが無いと Fusion ページは開けないため、先に Edit ページを開く。
     # プロジェクトマネージャーやダイアログの表示中は OpenPage が効かないため、エラーにする。
     resolve.OpenPage("edit")
@@ -241,7 +243,8 @@ try:
             )
         item = after_ids[new_ids[0]]
 
-        # 挿入した項目の長さを超えるフレームは Render が失敗する。明示された --frame は補正せず失敗とする。
+        # 挿入した項目の長さはタイムラインの標準の長さに固定され、API から変更できない(Resolve Studio 21 で確認)。
+        # 項目の長さを超えるフレームは Render が失敗する。明示された --frame は補正せず失敗とする。
         last_frame = item.GetEnd() - item.GetStart() - 1
         if frame_requested is None:
             frame_used = last_frame
@@ -335,6 +338,7 @@ try:
                 content_window = _content_window(image.DataWindow, image.Width, image.Height)
                 # 全面が透明な場合はフレーム全体を描いた1回目の結果を使い、content_window を null として記録する。
                 if content_window is not None:
+                    # Crop の XOffset、YOffset、XSize、YSize はピクセル単位であり、YOffset は下端から測る。DataWindow と同じ座標である。
                     x, y, w, h = content_window
                     crop.SetInput("XOffset", x)
                     crop.SetInput("YOffset", y)
