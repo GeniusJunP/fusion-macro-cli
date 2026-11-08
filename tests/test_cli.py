@@ -14,6 +14,7 @@ Resolve は起動しない。
 from __future__ import annotations
 
 import io
+import json
 import os
 import pathlib
 import sys
@@ -28,6 +29,7 @@ sys.path.insert(0, str(HERE))
 
 import fusion_macro_cli.cli as cli  # noqa: E402
 import fusion_macro_cli.document as document  # noqa: E402
+import fusion_macro_cli.fonts as fonts_mod  # noqa: E402
 import fusion_macro_cli.form as form_mod  # noqa: E402
 import fusion_macro_cli.rules as rules  # noqa: E402
 import fusion_macro_cli.show as show_mod  # noqa: E402
@@ -645,6 +647,92 @@ def test_fix_writes_to_output_directory_when_given():
 # --------------------------------------------------------------------------
 
 
+_FONTS_SETTING = """{
+\tTools = ordered() {
+\t\tTitle1 = TextPlus {
+\t\t\tInputs = {
+\t\t\t\tFont = Input { Value = "%s", },
+\t\t\t\tStyle = Input { Value = "%s", },
+\t\t\t},
+\t\t},
+\t}
+}
+"""
+
+
+def _run_fonts(argv: list[str], installed: fonts_mod.InstalledFonts) -> tuple[int, str, str]:
+    """システムのフォントの走査を差し替えて ``fonts`` を実行する。"""
+    original = fonts_mod.installed_fonts
+    fonts_mod.installed_fonts = lambda: installed
+    try:
+        return _run(argv)
+    finally:
+        fonts_mod.installed_fonts = original
+
+
+def _write_fonts_fixtures(td: str) -> list[str]:
+    a = pathlib.Path(td) / "a.setting"
+    b = pathlib.Path(td) / "b.setting"
+    a.write_text(_FONTS_SETTING % ("Sample Sans", "W6"), encoding="utf-8")
+    b.write_text(_FONTS_SETTING % ("Missing Serif", "W3"), encoding="utf-8")
+    return [str(a), str(b)]
+
+
+_SAMPLE_INSTALLED = fonts_mod.InstalledFonts(
+    frozenset({fonts_mod.Face("Sample Sans", "W6")}), ((pathlib.Path("broken.ttf"), "malformed sfnt"),)
+)
+
+
+def test_fonts_json_reports_installed_missing_and_unreadable():
+    with tempfile.TemporaryDirectory() as td:
+        a, b = _write_fonts_fixtures(td)
+        code, out, err = _run_fonts(["fonts", "--json", td], _SAMPLE_INSTALLED)
+        assert code == 1, f"stdout={out} stderr={err}"
+        data = json.loads(out)
+        assert data["fonts"] == [
+            {"font": "Sample Sans", "style": "W6", "installed": True, "files": [a]},
+            {"font": "Missing Serif", "style": "W3", "installed": False, "files": [b]},
+        ], data
+        assert data["unreadable"] == [{"path": "broken.ttf", "reason": "malformed sfnt"}], data
+        assert "cannot read font broken.ttf" in err, err
+    return PASS
+
+
+def test_fonts_table_prints_status_and_files():
+    with tempfile.TemporaryDirectory() as td:
+        a, b = _write_fonts_fixtures(td)
+        code, out, err = _run_fonts(["fonts", a, b], _SAMPLE_INSTALLED)
+        assert code == 1, f"stdout={out} stderr={err}"
+        lines = out.splitlines()
+        assert lines[0].split()[:3] == ["FONT", "STYLE", "STATUS"], out
+        assert "Sample Sans" in lines[1] and "installed" in lines[1] and a in lines[1], out
+        assert "Missing Serif" in lines[2] and "missing" in lines[2] and b in lines[2], out
+    return PASS
+
+
+def test_fonts_all_installed_exits_0():
+    with tempfile.TemporaryDirectory() as td:
+        a, _ = _write_fonts_fixtures(td)
+        code, out, err = _run_fonts(["fonts", a], _SAMPLE_INSTALLED)
+        assert code == 0, f"stdout={out} stderr={err}"
+    return PASS
+
+
+def test_fonts_nonexistent_path_reports_error_and_exits_1():
+    code, out, err = _run(["fonts", "/nonexistent/x.setting"])
+    assert code == 1 and "no such file" in err and out == "", f"stdout={out} stderr={err}"
+    return PASS
+
+
+def test_fonts_malformed_document_reports_file_error_and_exits_1():
+    with tempfile.TemporaryDirectory() as td:
+        bad = pathlib.Path(td) / "bad.setting"
+        bad.write_text("not a document {", encoding="utf-8")
+        code, out, err = _run_fonts(["fonts", str(bad)], _SAMPLE_INSTALLED)
+        assert code == 1 and str(bad) in err, f"stdout={out} stderr={err}"
+    return PASS
+
+
 def test_schema_dump_console_prints_exec_line_without_connecting():
     with tempfile.TemporaryDirectory() as td:
         schema_dir = pathlib.Path(td)
@@ -959,6 +1047,14 @@ TESTS = [
     (
         "fix_nonexistent_path_reports_error_and_exits_1",
         test_fix_nonexistent_path_reports_error_and_exits_1,
+    ),
+    ("fonts_json_reports_installed_missing_and_unreadable", test_fonts_json_reports_installed_missing_and_unreadable),
+    ("fonts_table_prints_status_and_files", test_fonts_table_prints_status_and_files),
+    ("fonts_all_installed_exits_0", test_fonts_all_installed_exits_0),
+    ("fonts_nonexistent_path_reports_error_and_exits_1", test_fonts_nonexistent_path_reports_error_and_exits_1),
+    (
+        "fonts_malformed_document_reports_file_error_and_exits_1",
+        test_fonts_malformed_document_reports_file_error_and_exits_1,
     ),
     ("fix_overwrites_in_place_by_default", test_fix_overwrites_in_place_by_default),
     ("fix_writes_to_output_directory_when_given", test_fix_writes_to_output_directory_when_given),

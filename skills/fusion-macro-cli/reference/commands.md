@@ -7,6 +7,7 @@ declare <setting> [-o <toml>] [--source <comp>]
 show <comp|setting|dir>... [--all]       Show candidates to publish, the publish result, or the saved tool
 apply <toml> [-o <dir>] [--dry-run]      Apply a declaration and write a preset
 check <comp|setting|dir>...              Inspect
+fonts <comp|setting|dir>... [--json]     List the Text+ fonts used and whether each is installed
 fix <comp|setting|dir>... [-o <dir>]     Fix the violations that can be fixed
 schema dump [-o <dir>] [--console]       Dump the schema
 preview <setting>... [--frame N] [--project NAME] [--console] [--timeout SEC]
@@ -23,6 +24,7 @@ pack <dir> -o <drfx>                     Inspect a `Templates` directory and arc
 - [apply](#apply)
 - [check](#check)
 - [fix](#fix)
+- [fonts](#fonts)
 - [pack](#pack)
 - [schema dump](commands/schema-dump.md) and [preview](commands/preview.md), the two commands that connect to Resolve, are in their own files
 
@@ -264,6 +266,25 @@ Fixes the violations that can be fixed. The content of each rule's fix is descri
 - Shows the names and locations of the rules fixed
 - If violations that cannot be fixed remain, they are shown and exit code 1 is returned. What could be fixed is written
 - With `-o`, every target is written to the output destination with its own file name. If two targets have the same file name, it is an error and nothing is written
+
+## fonts
+
+Lists the `Font` and `Style` pairs that the Text+ tools in the targets use, and whether each is installed. It uses the same collection and lookup as the `font-available` rule of `check`. It does not connect to Resolve.
+
+**Input** Paths of `.comp` or `.setting` files, or directories
+
+**Output** A table on standard output with the columns `FONT` `STYLE` `STATUS` `FILES`. `STATUS` is `installed` or `missing`, `STYLE` is `-` when the tool has no `Style`, and `FILES` lists the targets that use the pair. Font files that cannot be read are reported on standard error as `fusion-macro-cli: warning: cannot read font <path>: <reason>`.
+
+With `--json`, standard output is JSON instead of the table:
+
+```json
+{"fonts": [{"font": "Hiragino Sans", "style": "W8", "installed": true, "files": ["a.setting"]}],
+ "unreadable": [{"path": "/Library/Fonts/broken.ttf", "reason": "malformed sfnt"}]}
+```
+
+`style` is `null` when the tool has no `Style`.
+
+- Exit code 0 if every pair is installed (or the targets use no font), 1 if any pair is missing or a target cannot be parsed
 
 ## pack
 

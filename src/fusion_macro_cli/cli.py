@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import pathlib
 import sys
 import tomllib
@@ -284,6 +285,51 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------------------------------
+# fonts
+# --------------------------------------------------------------------------
+
+
+def cmd_fonts(args: argparse.Namespace) -> int:
+    paths = _expand_targets(args.paths)
+    if paths is None:
+        return 1
+    any_error = False
+    #: (Font, Style) -> その組を使うファイル。最初に現れた順に並べる。
+    users: dict[tuple[str, str | None], list[str]] = {}
+    for path in paths:
+        doc = _read_and_classify(path)
+        if doc is None:
+            any_error = True
+            continue
+        tools_table = doc.root.get("Tools")
+        if tools_table is None:
+            continue
+        for _, font, style in rules.font_uses(tools_table):
+            files = users.setdefault((font, style), [])
+            if str(path) not in files:
+                files.append(str(path))
+
+    installed = _scan_fonts()
+    entries = [
+        {"font": font, "style": style, "installed": installed.has(font, style), "files": files}
+        for (font, style), files in users.items()
+    ]
+    if args.json:
+        unreadable = [{"path": str(p), "reason": reason} for p, reason in installed.unreadable]
+        print(json.dumps({"fonts": entries, "unreadable": unreadable}, ensure_ascii=False, indent=2))
+    elif entries:
+        rows = [("FONT", "STYLE", "STATUS", "FILES")] + [
+            (e["font"], e["style"] if e["style"] is not None else "-",
+             "installed" if e["installed"] else "missing", ", ".join(e["files"]))
+            for e in entries
+        ]
+        widths = [max(len(row[i]) for row in rows) for i in range(3)]
+        for row in rows:
+            print("  ".join(row[i].ljust(widths[i]) for i in range(3)) + "  " + row[3])
+    return 1 if any_error or any(not e["installed"] for e in entries) else 0
+
+
+# --------------------------------------------------------------------------
 # check / fix
 # --------------------------------------------------------------------------
 
@@ -538,6 +584,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--schema", type=pathlib.Path, default=None, help="override the schema directory"
     )
     p_check.set_defaults(func=cmd_check)
+
+    p_fonts = subparsers.add_parser(
+        "fonts",
+        help="list the Text+ fonts used by .comp/.setting files and whether each is installed",
+    )
+    p_fonts.add_argument(
+        "paths", nargs="+", help="paths to .comp/.setting files or directories"
+    )
+    p_fonts.add_argument(
+        "--json", action="store_true", help="print machine-readable JSON instead of a table"
+    )
+    p_fonts.set_defaults(func=cmd_fonts)
 
     p_fix = subparsers.add_parser(
         "fix",

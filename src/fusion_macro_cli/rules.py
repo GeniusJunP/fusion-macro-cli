@@ -30,6 +30,7 @@ __all__ = [
     "RULES_HELP",
     "check",
     "fix",
+    "font_uses",
 ]
 
 
@@ -517,6 +518,20 @@ def _check_no_absolute_path(
 # ツールに対する規則: font-available (修復不可)
 # --------------------------------------------------------------------------
 
+def font_uses(tools_table: document.Table) -> list[tuple[str, str, str | None]]:
+    """``Font`` を持つテーブルごとに ``(場所, Font, Style)`` を返す。``Style`` が無ければ ``None`` である。
+
+    ``font-available`` と ``fonts`` コマンドが共有する。
+    """
+    uses = []
+    for path, table in _walk(tools_table, []):
+        font = _input_string(table, "Font")
+        if not font:
+            continue
+        uses.append((".".join(path) if path else font, font, _input_string(table, "Style")))
+    return uses
+
+
 def _check_font_available(
     doc: document.Document,
     tools_table: document.Table,
@@ -531,14 +546,9 @@ def _check_font_available(
     """
     assert installed is not None
     violations = []
-    for path, table in _walk(tools_table, []):
-        font = _input_string(table, "Font")
-        if not font:
-            continue
-        style = _input_string(table, "Style")
+    for loc, font, style in font_uses(tools_table):
         if installed.has(font, style):
             continue
-        loc = ".".join(path) if path else font
         shown = f"{font!r} style {style!r}" if style is not None else repr(font)
         message = f"font not found: {shown}"
         if installed.unreadable:

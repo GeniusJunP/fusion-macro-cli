@@ -101,7 +101,7 @@ fusion-macro-cli fix work/0003_title.comp            # overwrites; -o <dir> writ
 fusion-macro-cli show work/0003_title.comp
 ```
 
-`check` `fix` `show` take several paths and directories at once (`fusion-macro-cli check work/ other.setting`).
+`check` `fix` `show` `fonts` take several paths and directories at once (`fusion-macro-cli check work/ other.setting`). `fonts` reports which of the Text+ fonts used by a preset are installed on this machine.
 
 A `.comp` extracted from a `.drt` usually contains the `MediaIn` and `MediaOut` that Resolve adds and keyframes at the timeline position.
 `fix` repairs the violations that have a repair procedure (`no-media-io`, `keyframe-origin`, and others). Violations that remain are handled by editing the `.comp`.
